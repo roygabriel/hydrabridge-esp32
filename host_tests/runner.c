@@ -27,6 +27,7 @@ int main(int argc, char **argv)
     register_preset_engine_tests();
     register_light_registry_tests();
     register_command_queue_tests();
+    register_command_engine_tests();
     /* Future phases append calls here:
      * register_crc16_tests();           (1.1)
      * register_fsci_builder_tests();    (1.2)
