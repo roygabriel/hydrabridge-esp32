@@ -1,0 +1,38 @@
+# ESP-IDF build output
+/build/
+/managed_components/
+/dependencies.lock
+sdkconfig
+sdkconfig.old
+sdkconfig.*.old
+
+# Editor / OS
+.vscode/.browse.c_cpp.db*
+.vscode/c_cpp_properties.json
+.vscode/launch.json
+.vscode/ipch/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Python / tooling
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# Logs and generated captures
+*.log
+*.btsnoop
+
+# Decompiled APK references are useful locally but too large/noisy for git
+/reference/decompiled/
+*decompiled*/
+
+# Firmware artifacts
+*.bin
+*.elf
+*.map
+*.hex
