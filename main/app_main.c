@@ -8,6 +8,7 @@
 #include "event_log.h"
 #include "modbus_interface.h"
 #include "mqtt_bridge.h"
+#include "ota_update.h"
 #include "web_ui.h"
 
 static const char *TAG = "hydra_app";
@@ -24,6 +25,12 @@ void app_main(void)
     ESP_LOGI(TAG, "Hydra 64HD controller starting");
 
     event_log_init();
+
+    /* Run OTA init early -- if this boot is a freshly-flashed image we
+     * want to cancel the pending rollback before anything else can
+     * crash. */
+    ESP_ERROR_CHECK(ota_update_init());
+
     ESP_ERROR_CHECK(config_store_init());
     ESP_ERROR_CHECK(command_engine_init());
 
