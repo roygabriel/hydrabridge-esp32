@@ -3,5 +3,6 @@
 
 void register_smoke_tests(void);
 void register_event_log_tests(void);
+void register_config_store_tests(void);
 
 #endif /* HOST_TESTS_ALL_TESTS_H */
