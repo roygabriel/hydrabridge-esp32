@@ -32,6 +32,7 @@ file(GLOB TEST_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/tests/test
 set(MODULE_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/../components/event_log/src/event_log.c
     ${CMAKE_CURRENT_SOURCE_DIR}/../components/config_store/src/config_store_defaults.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/../components/fsci_codec/src/fsci_codec.c
 )
 
 add_executable(host_tests
@@ -47,6 +48,7 @@ target_include_directories(host_tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/tests
     ${CMAKE_CURRENT_SOURCE_DIR}/../components/event_log/include
     ${CMAKE_CURRENT_SOURCE_DIR}/../components/config_store/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/../components/fsci_codec/include
 )
 
 # Unity config: skip the unity_config.h include (ESP-IDF supplies one only
