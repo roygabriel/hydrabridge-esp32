@@ -18,4 +18,5 @@ idf_component_register(
         event_log
         command_engine
         ota_update
+        preset_engine
 )
