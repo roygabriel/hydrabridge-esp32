@@ -39,6 +39,7 @@ set(MODULE_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/../components/light_registry/src/light_registry.c
     ${CMAKE_CURRENT_SOURCE_DIR}/../components/command_queue/src/command_queue.c
     ${CMAKE_CURRENT_SOURCE_DIR}/../components/command_engine/src/command_engine.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/../components/modbus_interface/src/modbus_interface.c
 )
 
 add_executable(host_tests
@@ -61,6 +62,7 @@ target_include_directories(host_tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../components/light_registry/include
     ${CMAKE_CURRENT_SOURCE_DIR}/../components/command_queue/include
     ${CMAKE_CURRENT_SOURCE_DIR}/../components/command_engine/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/../components/modbus_interface/include
 )
 
 # Unity config: skip the unity_config.h include (ESP-IDF supplies one only
