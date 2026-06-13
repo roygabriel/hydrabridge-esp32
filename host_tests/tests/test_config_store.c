@@ -39,8 +39,9 @@ static void test_modbus_defaults_match_spec(void)
     TEST_ASSERT_EQUAL_INT(MODBUS_PARITY_EVEN, m.parity);
     TEST_ASSERT_EQUAL_UINT8(1,     m.stop_bits);
     TEST_ASSERT_EQUAL_UINT8(1,     m.uart_port);
+    /* Waveshare Industrial ESP32-S3 Control Board RS485 pinout. */
     TEST_ASSERT_EQUAL_INT8(17,     m.tx_pin);
-    TEST_ASSERT_EQUAL_INT8(16,     m.rx_pin);
+    TEST_ASSERT_EQUAL_INT8(18,     m.rx_pin);
     TEST_ASSERT_EQUAL_INT8(4,      m.rts_de_pin);
     TEST_ASSERT_EQUAL_UINT32(250,   m.response_timeout_ms);
     TEST_ASSERT_EQUAL_UINT32(30000, m.command_watchdog_ms);

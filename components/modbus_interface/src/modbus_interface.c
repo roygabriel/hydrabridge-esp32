@@ -176,12 +176,23 @@ void modbus_store_refresh_status_mirrors(void)
 }
 
 #ifdef ESP_PLATFORM
+uint16_t *modbus_store_raw_array(void)
+{
+    return g_store;
+}
+
 esp_err_t modbus_interface_init(void)
 {
     modbus_store_reset();
     g_store[HYDRA_MODBUS_REG_MODBUS_STATUS] = HYDRA_MODBUS_STATUS_SLAVE_READY;
     ESP_LOGI(TAG, "init: %d slots, magic=0x%04x",
              MODBUS_STORE_REG_COUNT, (unsigned)HYDRA_MODBUS_MAGIC_VALUE);
+
+    esp_err_t err = modbus_slave_driver_start();
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "modbus_slave_driver_start failed: 0x%x", err);
+        g_store[HYDRA_MODBUS_REG_MODBUS_STATUS] = HYDRA_MODBUS_STATUS_ERROR;
+    }
     return ESP_OK;
 }
 #endif

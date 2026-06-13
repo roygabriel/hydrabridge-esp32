@@ -23,6 +23,8 @@ void modbus_store_refresh_status_mirrors(void);
 #ifdef ESP_PLATFORM
 #include "esp_err.h"
 esp_err_t modbus_interface_init(void);
+esp_err_t modbus_slave_driver_start(void);
+uint16_t *modbus_store_raw_array(void);
 #endif
 
 #endif /* HYDRA_MODBUS_INTERFACE_H */

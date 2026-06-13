@@ -33,8 +33,12 @@ void config_defaults_modbus(config_modbus_t *out)
     out->parity               = MODBUS_PARITY_EVEN;
     out->stop_bits            = 1;
     out->uart_port            = 1;
+    /* RS485 pins for the Waveshare Industrial ESP32-S3 Control Board.
+     * CONFIRM against the Waveshare wiki for this board variant; if
+     * the silkscreen says different GPIOs, override via NVS at runtime
+     * without re-flashing. */
     out->tx_pin               = 17;
-    out->rx_pin               = 16;
+    out->rx_pin               = 18;
     out->rts_de_pin           = 4;
     out->response_timeout_ms  = 250;
     out->command_watchdog_ms  = 30000;
