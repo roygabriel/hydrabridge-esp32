@@ -53,7 +53,7 @@ static esp_err_t send_json(httpd_req_t *req, const char *json)
 /* ===== HTML status / control page ===== */
 static const char STATUS_HTML[] =
 "<!doctype html><html><head><meta charset=utf-8>"
-"<title>Hydra Controller</title>"
+"<title>Mobius ESP32 Controller</title>"
 "<meta name=viewport content=\"width=device-width,initial-scale=1\">"
 "<style>"
 "body{font-family:system-ui,sans-serif;max-width:900px;margin:1em auto;padding:0 1em}"
@@ -68,7 +68,7 @@ static const char STATUS_HTML[] =
 ".muted{color:#888;font-size:0.9em}"
 "#status{padding:0.5em;background:#f8f8f8;border-radius:4px}"
 "</style></head><body>"
-"<h1>Hydra 64HD Controller</h1>"
+"<h1>Mobius ESP32 Controller</h1>"
 "<div id=status class=muted>loading status&hellip;</div>"
 
 "<h2>Scan &amp; add lights</h2>"
@@ -84,6 +84,11 @@ static const char STATUS_HTML[] =
 "<script>"
 "async function jget(u){return (await fetch(u)).json();}"
 "async function jpost(u,b){return (await fetch(u,{method:'POST',headers:{'Content-Type':'application/json'},body:b?JSON.stringify(b):''})).json();}"
+"async function jdel(u){return (await fetch(u,{method:'DELETE'})).json();}"
+"function modelLabel(m){"
+" const t={320:'Prime HD',321:'Prime Freshwater',322:'Prime 16HD',335:'Hydra 64HD',336:'Hydra 32HD',337:'Hydra 26HD',338:'Blade'};"
+" return t[m]||('AI light '+m);"
+"}"
 "async function refreshStatus(){"
 " try{const s=await jget('/api/status');"
 " document.getElementById('status').textContent="
@@ -95,7 +100,12 @@ static const char STATUS_HTML[] =
 " for(const l of r.lights){const tr=document.createElement('tr');"
 "  tr.innerHTML=`<td>${l.display_name}</td><td><code>${l.serial}</code></td><td>${l.last_seen_rssi}</td>"
 "   <td><button class=on onclick=\"cmd('${l.light_id}','on')\">On</button>"
-"   <button class=off onclick=\"cmd('${l.light_id}','off')\">Off</button></td>`;tb.appendChild(tr);}"
+"   <button class=off onclick=\"cmd('${l.light_id}','off')\">Off</button>"
+"   <button onclick=\"removeLight('${l.light_id}')\">Remove</button></td>`;tb.appendChild(tr);}"
+"}"
+"async function removeLight(id){"
+" if(!confirm('Remove '+id+'?'))return;"
+" const r=await jdel('/api/lights/'+id);console.log('remove',r);refreshLights();"
 "}"
 "async function startScan(){"
 " document.getElementById('scanmsg').textContent=' scanning&hellip;';"
@@ -106,12 +116,13 @@ static const char STATUS_HTML[] =
 " const r=await jget('/api/scan/results');const tb=document.querySelector('#scanresults tbody');tb.innerHTML='';"
 " for(const l of r.results){const tr=document.createElement('tr');"
 "  const lid='hydra64-'+l.serial.replace(/[^a-zA-Z0-9]/g,'').slice(0,10);"
-"  tr.innerHTML=`<td>${l.name||'?'}</td><td><code>${l.serial}</code></td><td>${l.model}</td><td>${l.rssi}</td><td><code>${l.ble_addr}</code></td>"
-"   <td><button onclick=\"addLight('${lid}','${l.name||'Hydra'}','${l.ble_addr}','${l.serial}',${l.model})\">Add</button></td>`;tb.appendChild(tr);}"
+"  const label=modelLabel(l.model);const shown=l.name||label;"
+"  tr.innerHTML=`<td>${shown}</td><td><code>${l.serial}</code></td><td>${label} (${l.model})</td><td>${l.rssi}</td><td><code>${l.ble_addr}</code> (t=${l.ble_addr_type})</td>"
+"   <td><button onclick=\"addLight('${lid}','${shown}','${l.ble_addr}',${l.ble_addr_type},'${l.serial}',${l.model})\">Add</button></td>`;tb.appendChild(tr);}"
 " document.getElementById('scanmsg').textContent=` ${r.results.length} found.`;"
 "}"
-"async function addLight(id,name,addr,serial,model){"
-" const r=await jpost('/api/lights',{light_id:id,display_name:name,ble_addr:addr,serial:serial,model:model});"
+"async function addLight(id,name,addr,addr_type,serial,model){"
+" const r=await jpost('/api/lights',{light_id:id,display_name:name,ble_addr:addr,ble_addr_type:addr_type,serial:serial,model:model});"
 " alert('add: '+JSON.stringify(r));refreshLights();"
 "}"
 "async function cmd(id,power){"
@@ -189,10 +200,10 @@ static esp_err_t get_scan_results(httpd_req_t *req)
                  r->ble_addr[0], r->ble_addr[1], r->ble_addr[2],
                  r->ble_addr[3], r->ble_addr[4], r->ble_addr[5]);
         off += snprintf(buf + off, sizeof buf - off,
-            "%s{\"name\":\"%s\",\"ble_addr\":\"%s\",\"rssi\":%d,"
+            "%s{\"name\":\"%s\",\"ble_addr\":\"%s\",\"ble_addr_type\":%d,\"rssi\":%d,"
             "\"model\":%u,\"serial\":\"%s\"}",
             i == 0 ? "" : ",",
-            r->name, addr, r->rssi,
+            r->name, addr, (int)r->ble_addr_type, r->rssi,
             (unsigned)r->manuf.model, r->manuf.serial);
     }
     snprintf(buf + off, sizeof buf - off, "]}");
@@ -290,7 +301,9 @@ static esp_err_t post_lights(httpd_req_t *req)
     json_get_int(body, "model", &model);
     l.model = (uint16_t)model;
     l.enabled = true;
-    l.ble_addr_type = BLE_ADDR_PUBLIC;
+    int addr_type = BLE_ADDR_PUBLIC;
+    json_get_int(body, "ble_addr_type", &addr_type);
+    l.ble_addr_type = (addr_type == BLE_ADDR_RANDOM) ? BLE_ADDR_RANDOM : BLE_ADDR_PUBLIC;
     if (parse_ble_addr(addr_str, l.ble_addr) != 0) {
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "bad ble_addr");
         return ESP_FAIL;
@@ -305,6 +318,28 @@ static esp_err_t post_lights(httpd_req_t *req)
 
     char out[160];
     snprintf(out, sizeof out, "{\"added\":true,\"light_id\":\"%s\"}", l.light_id);
+    return send_json(req, out);
+}
+
+static esp_err_t delete_light(httpd_req_t *req)
+{
+    const char *p = strstr(req->uri, "/api/lights/");
+    if (!p) { httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "bad uri"); return ESP_FAIL; }
+    p += strlen("/api/lights/");
+    char light_id[LIGHT_ID_LEN];
+    size_t i = 0;
+    while (p[i] && p[i] != '/' && i + 1 < LIGHT_ID_LEN) { light_id[i] = p[i]; ++i; }
+    light_id[i] = '\0';
+    if (i == 0) { httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "missing light_id"); return ESP_FAIL; }
+
+    int rc = light_registry_remove(light_id);
+    if (rc != 0) {
+        httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "not found");
+        return ESP_FAIL;
+    }
+    light_registry_save();
+    char out[96];
+    snprintf(out, sizeof out, "{\"removed\":true,\"light_id\":\"%s\"}", light_id);
     return send_json(req, out);
 }
 
@@ -425,6 +460,7 @@ esp_err_t web_ui_init(void)
     static const httpd_uri_t r_lights_get    = { .uri = "/api/lights",           .method = HTTP_GET,  .handler = get_lights };
     static const httpd_uri_t r_lights_post   = { .uri = "/api/lights",           .method = HTTP_POST, .handler = post_lights };
     static const httpd_uri_t r_light_cmd     = { .uri = "/api/lights/*",         .method = HTTP_POST, .handler = post_light_command };
+    static const httpd_uri_t r_light_del     = { .uri = "/api/lights/*",         .method = HTTP_DELETE, .handler = delete_light };
     static const httpd_uri_t r_logs          = { .uri = "/api/logs",             .method = HTTP_GET,  .handler = get_logs };
     static const httpd_uri_t r_ota           = { .uri = "/api/ota",              .method = HTTP_POST, .handler = post_ota };
 
@@ -435,6 +471,7 @@ esp_err_t web_ui_init(void)
     httpd_register_uri_handler(s_server, &r_lights_get);
     httpd_register_uri_handler(s_server, &r_lights_post);
     httpd_register_uri_handler(s_server, &r_light_cmd);
+    httpd_register_uri_handler(s_server, &r_light_del);
     httpd_register_uri_handler(s_server, &r_logs);
     httpd_register_uri_handler(s_server, &r_ota);
 
