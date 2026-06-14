@@ -23,4 +23,5 @@ idf_component_register(
         command_queue
         ble_scanner
         ha_discovery
+        wifi_station
 )

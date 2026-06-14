@@ -10,6 +10,7 @@
 #include "mqtt_bridge.h"
 #include "ota_update.h"
 #include "web_ui.h"
+#include "wifi_station.h"
 
 static const char *TAG = "hydra_app";
 
@@ -42,6 +43,10 @@ void app_main(void)
 
     /* MQTT and web UI are optional based on persisted config. */
     ESP_ERROR_CHECK(mqtt_bridge_init());
+
+    /* WiFi must come up before the HTTP server so the netif exists. */
+    ESP_ERROR_CHECK(hydra_wifi_start());
+
     ESP_ERROR_CHECK(web_ui_init());
 
     ESP_LOGI(TAG, "Hydra 64HD controller initialized");
