@@ -25,12 +25,14 @@ Features include:
 
 - Automatic Hydra® light discovery
 - Local BLE communication
-- MQTT integration
-- RS485 communication
-- Home Assistant auto-discovery
-- Reusable lighting profiles
-- Scheduled lighting control
-- Sunrise and sunset ramping
+- Browser-based setup and control UI
+- MQTT integration with optional Home Assistant auto-discovery
+- RS485 / Modbus RTU slave support for PLC and automation controllers
+- Reusable built-in and custom lighting profiles
+- Scheduled lighting control for individual lights and light groups
+- SNTP time sync with local sunrise and sunset scheduling
+- First-boot WiFi setup hotspot
+- Web-based OTA firmware updates
 - Multi-light group support
 - Fully local operation with no cloud dependency
 
@@ -45,21 +47,35 @@ Other ESP32-S3 boards can run HydraBridge ESP32, but may need changes before fla
 | Surface | Status |
 |---|---|
 | FSCI / myAI protocol codec | ✅ Byte-exact verified against captured hardware traces (CRC, builder, parser, reassembly) |
-| Channel model + presets | ✅ 9-channel Hydra® 64HD set, 5 built-in presets (`off`, `on`, `moonlight`, `blue_moonlight`, `test_25`) |
-| LiveDemoScene payload builder | ✅ Reproduces every captured On/Off/LBM/Moonlight TX frame byte-for-byte |
-| Light registry + command queue | ✅ 4 lights, 4 groups, per-light FIFO with coalescing, NVS persistence |
+| Channel model + presets | ✅ 9-channel Hydra® 64HD model, command presets, and reef profile support |
+| Lighting profiles | ✅ Built-in coral profiles plus user-created profiles with descriptions |
+| LiveDemoScene payload builder | ✅ Reproduces captured On/Off/LBM/Moonlight TX frames byte-for-byte |
+| Light registry + command queue | ✅ 4 lights, 4 groups, renaming, auto-reconnect metadata, per-light FIFO with coalescing, NVS persistence |
 | Command engine | ✅ Unified `ce_request_t` → validate → expand → enqueue from any source |
+| BLE discovery and light control | ✅ Scans, registers, reconnects, pairs, and writes commands to Hydra® lights |
+| Web UI | ✅ Local browser UI for discovery, lights, groups, profiles, schedules, OTA, MQTT, RS485, WiFi, time, and sun settings |
+| Lighting schedules | ✅ NVS-backed schedules targeting lights or groups, with fixed-time, sunrise, sunset, intensity, profile, and ramp controls |
+| Time and sun events | ✅ Optional SNTP sync, POSIX timezone setting, and local sunrise/sunset calculation from configured coordinates |
 | Modbus RTU slave | ✅ Optional ESP-Modbus RTU slave; disabled by default, configurable from the web UI |
 | Modbus register map | ✅ Full spec map (system + 4 light + 4 group blocks) with result codes 1:1 to `ce_result_t` |
 | MQTT bridge | ✅ Optional MQTT client; disabled by default; configurable from the web UI; light/group command subscriptions and result topics |
+| Home Assistant discovery | ✅ Optional MQTT discovery publishing when MQTT is enabled and the HA checkbox is on |
 | OTA partition + rollback | ✅ Two app slots, `esp_ota_mark_app_valid_cancel_rollback` on good boot |
 | WiFi setup portal | ✅ First-boot setup hotspot at `HydraBridge-Setup` / `http://192.168.1.10/`, configurable from Settings |
-| NimBLE central (scan / connect / GATT) | ⏳ Stubbed; first hardware session |
-| BLE worker task (drains queue → writes) | ⏳ Stubbed; first hardware session |
-| Web UI | ✅ Local browser UI for discovery, lights, groups, profiles, RS485, and MQTT settings |
-| Home Assistant discovery | ✅ Optional MQTT discovery publishing when MQTT is enabled and the HA checkbox is on |
+| Release workflow | ✅ GitHub Actions builds ESP32-S3 firmware and publishes release assets on version tags |
 
-Today: a PLC can speak Modbus to the controller and see the queue accept commands. The light won't actually light until the BLE worker lands in the first hardware session.
+Today: the controller can be flashed from a release asset, joined to WiFi through the setup portal, discover and register Hydra® lights, control them locally over BLE, expose automation through MQTT and Modbus, and run local lighting schedules without cloud services.
+
+## Planned work
+
+The current public backlog is tracked in GitHub issues:
+
+| Area | Issue |
+|---|---|
+| Static IP and configurable hostname settings | [#5](https://github.com/roygabriel/hydrabridge-esp32/issues/5) |
+| Optional username/password authentication | [#6](https://github.com/roygabriel/hydrabridge-esp32/issues/6) |
+| AI pump support | [#7](https://github.com/roygabriel/hydrabridge-esp32/issues/7) |
+| Comprehensive public API documentation | [#8](https://github.com/roygabriel/hydrabridge-esp32/issues/8) |
 
 ## Repo layout
 
@@ -69,21 +85,28 @@ components/
   fsci_codec/                CRC + frame builder + parser + reassembly
   hydra64hd_protocol/        SupportedColorChannels read + LiveDemoScene write payload builders
   channel_model/             Canonical 9-channel set, name lookup, validation
-  preset_engine/             5 built-in presets
+  preset_engine/             Command presets
   light_registry/            Registered lights + named groups (NVS-backed)
+  ble_scanner/               Hydra advertisement parsing
+  ble_light_client/          NimBLE central scan/connect/GATT command worker
   command_queue/             Per-light bounded FIFO with coalescing
   command_engine/            ce_request_t → ce_result_t pipeline (Modbus / MQTT / web all converge here)
   modbus_interface/          Holding-register store + ESP-Modbus driver + RS485 UART wiring
   mqtt_bridge/               Optional MQTT client + JSON command-payload parser
-  ble_light_client/          NimBLE central — stubbed
-  config_store/              Per-category NVS-backed config (controller / modbus / wifi / mqtt)
+  ha_discovery/              Home Assistant MQTT discovery publisher
+  config_store/              Per-category NVS-backed config
   event_log/                 Bounded ring + password redaction
   ota_update/                Web-upload OTA + rollback cancel
-  web_ui/                    HTTP server — stubbed
+  schedule_engine/           Local lighting schedule evaluation and command dispatch
+  sun_service/               Local sunrise/sunset calculation
+  time_service/              SNTP and timezone handling
+  web_ui/                    Embedded HTTP API and browser UI
+  wifi_station/              WiFi station mode, setup AP fallback, and mDNS
 docs/
   ble-protocol-reference.md            Clean technical reference for the BLE protocol
   rs485-modbus-protocol.md             RS485 / Modbus command reference
   quickstart.md                        Flashing and first-boot setup guide
+  time-sun-schedules.md                SNTP, local sunrise/sunset, and lighting schedules
 host_tests/                  Unity-based host tests for pure-C modules
 ```
 
@@ -113,7 +136,7 @@ idf.py -p /dev/ttyUSB0 flash monitor
 
 ## Host tests
 
-Pure-C modules (protocol codec, channel model, presets, registries, queue, engine, Modbus store, MQTT parser) compile to a Linux binary using Unity:
+Pure-C modules (protocol codec, channel model, presets, registries, queue, engine, Modbus store, MQTT parser, sun calculations, schedules, and config defaults) compile to a Linux binary using Unity:
 
 ```bash
 . ~/esp/esp-idf/export.sh   # Unity is pulled from $IDF_PATH/components/unity
@@ -122,7 +145,7 @@ cmake --build host_tests/build
 ./host_tests/build/host_tests
 ```
 
-Currently **170 tests** across 12 test files. Every captured CRC, every captured TX/RX frame, every preset, every Modbus register dispatch path, and every MQTT payload shape is covered.
+Currently **179 tests** across 17 test files. Coverage includes captured CRCs, captured TX/RX frames, presets, Modbus dispatch paths, MQTT payloads, light registry/group behavior, config defaults, event-log redaction, sun calculations, and schedule timing logic.
 
 ## RS485 / Modbus quick start
 

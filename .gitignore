@@ -41,6 +41,9 @@ venv/
 # Local reverse-engineering reference material is useful locally but not for git
 /reference/
 
+# Local planning notes
+/docs/future-feature-ideas.md
+
 # Firmware artifacts
 *.bin
 *.elf
