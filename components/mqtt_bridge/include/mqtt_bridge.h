@@ -9,8 +9,8 @@
 
 /* mqtt_bridge: JSON parser for MQTT light commands. The MQTT client
  * lifecycle (connect/subscribe/publish) lives in the ESP-IDF build;
- * the parser is pure C so it's host-testable against every payload
- * shape in the spec L1138-L1208. */
+ * the parser is pure C so it's host-testable against every supported
+ * payload shape. */
 
 int mqtt_parse_light_command(const char *json_text,
                              const char *target_light_id,

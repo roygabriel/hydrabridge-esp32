@@ -7,8 +7,7 @@
 /* fsci_codec
  * ==========
  * FSCI (Freescale Serial Communications Interface) frame format used by
- * the myAI/Mobius BLE protocol. See docs/myai-ble-reverse-engineering.md
- * for the wire format derivation.
+ * the myAI/Mobius BLE protocol.
  *
  *   offset  size  meaning
  *   0       1     start marker  = 0x02

@@ -12,7 +12,7 @@
 
 /* command_engine: normalizes commands from any input surface and
  * enqueues them on command_queue. Result codes align with the Modbus
- * last_result_code enum in spec L855-873. */
+ * last_result_code register values. */
 
 typedef enum {
     CE_RESULT_ACCEPTED          = 1,

@@ -5,8 +5,7 @@
 #include <stdint.h>
 #include <string.h>
 
-/* Preset values come from docs/esp32-hydra64hd-controller-plan.md
- * "Preset System" section (L661-L733). Order matches channel_model_all():
+/* Built-in preset values. Order matches channel_model_all():
  *   brightness, coolwhite, blue, deepred, violet, uv, green, royalblue, moonlight
  */
 static const channel_state_t k_preset_off = {
@@ -17,18 +16,18 @@ static const channel_state_t k_preset_on = {
     .values = { 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000 }
 };
 
-/* spec L693-L703: brightness=1000, moonlight=50, all others=0 */
+/* brightness=1000, moonlight=50, all others=0 */
 static const channel_state_t k_preset_moonlight = {
     .values = { 1000, 0, 0, 0, 0, 0, 0, 0, 50 }
 };
 
-/* spec L707-L716: brightness=1000, blue=40, violet=20, royalblue=80, others=0 */
+/* brightness=1000, blue=40, violet=20, royalblue=80, others=0 */
 static const channel_state_t k_preset_blue_moonlight = {
     /*           bright  cw  blue  dr   viol  uv  grn  rblue  moon */
     .values = { 1000,    0,  40,   0,   20,   0,  0,   80,    0 }
 };
 
-/* spec L721-L732: brightness=1000, every color channel at 250 */
+/* brightness=1000, every color channel at 250 */
 static const channel_state_t k_preset_test_25 = {
     .values = { 1000, 250, 250, 250, 250, 250, 250, 250, 250 }
 };

@@ -1,7 +1,6 @@
-/* Phase 0.4b: host tests pinning config defaults to the spec values
- * in docs/esp32-hydra64hd-controller-plan.md "Persistent Data Model".
- * If any of these fail, either the defaults regressed or the spec
- * changed -- update both together.
+/* Host tests pin config defaults. If any of these fail, either the
+ * defaults regressed or the intended product defaults changed -- update
+ * both together.
  */
 #include "unity.h"
 #include "all_tests.h"
@@ -9,7 +8,7 @@
 
 #include <string.h>
 
-/* ---- controller defaults (refs spec L199-L210) ---- */
+/* ---- controller defaults ---- */
 
 static void test_controller_defaults_match_spec(void)
 {
@@ -25,7 +24,7 @@ static void test_controller_defaults_match_spec(void)
     TEST_ASSERT_EQUAL_UINT8(1,      c.ble_command_concurrency);
 }
 
-/* ---- modbus defaults (refs spec L213-L231 + L234-L240) ---- */
+/* ---- modbus defaults ---- */
 
 static void test_modbus_defaults_match_spec(void)
 {
@@ -47,7 +46,7 @@ static void test_modbus_defaults_match_spec(void)
     TEST_ASSERT_EQUAL_UINT32(30000, m.command_watchdog_ms);
 }
 
-/* ---- wifi defaults (refs spec L252-L258) ---- */
+/* ---- wifi defaults ---- */
 
 static void test_wifi_defaults_match_spec(void)
 {
@@ -61,7 +60,7 @@ static void test_wifi_defaults_match_spec(void)
     TEST_ASSERT_EQUAL_STRING("hydrabridge", w.ap_password);
 }
 
-/* ---- mqtt defaults (refs spec L263-L273) ---- */
+/* ---- mqtt defaults ---- */
 
 static void test_mqtt_defaults_match_spec(void)
 {

@@ -1,7 +1,5 @@
-/* Pure-C defaults for the four built-in config records. Values come from
- * docs/esp32-hydra64hd-controller-plan.md "Persistent Data Model"
- * section. Keep field defaults in sync with that spec; the host tests
- * pin specific values to specific spec lines. */
+/* Pure-C defaults for the built-in config records. Keep these values in
+ * sync with the web UI, Modbus defaults, MQTT defaults, and host tests. */
 
 #include "config_store.h"
 

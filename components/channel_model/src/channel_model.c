@@ -10,11 +10,10 @@
 static const char *TAG = "channel_model";
 #endif
 
-/* Canonical Hydra 64HD channel set in fixture order. Visual IDs and
- * order come from docs/myai-ble-reverse-engineering.md (the captured
- * SupportedColorChannels response 01 10 11 19 17 15 13 12 1e) and from
- * docs/esp32-hydra64hd-controller-plan.md "Channel Abstraction"
- * section. Do NOT reorder -- the LiveDemoScene payload builder emits
+/* Canonical Hydra 64HD channel set in fixture order. Visual IDs and order
+ * come from the validated SupportedColorChannels response:
+ * 01 10 11 19 17 15 13 12 1e.
+ * Do NOT reorder -- the LiveDemoScene payload builder emits
  * triples in this exact order. */
 static const channel_def_t k_channels[CHANNEL_COUNT] = {
     { "brightness", "Brightness", 0x01, 0, CHANNEL_VALUE_MAX, CHANNEL_ROLE_MASTER },

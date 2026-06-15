@@ -1,6 +1,5 @@
-/* Phase 1.5: byte-equal verification of hydra64hd_protocol payload
- * builders against captured TX frames in
- * docs/myai-ble-reverse-engineering.md.
+/* Byte-equal verification of hydra64hd_protocol payload builders against
+ * captured TX frames.
  *
  * Strategy: extract the FSCI payload (bytes [9..len-3]) from each
  * captured TX frame, call the matching builder, and compare. */

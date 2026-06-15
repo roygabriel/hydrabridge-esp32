@@ -14,7 +14,7 @@
  * 9-channel state. User-editable presets in NVS are out of scope for
  * v1.
  *
- * Preset IDs match the Modbus enum encoding documented in spec L875-880.
+ * Preset IDs match the Modbus enum encoding.
  */
 
 typedef enum {

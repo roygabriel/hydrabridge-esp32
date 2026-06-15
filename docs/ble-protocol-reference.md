@@ -1,8 +1,8 @@
 # Hydra® 64HD BLE Protocol — Technical Reference
 
-Clean reference for the myAI / Mobius® BLE protocol as used by the Aqua Illumination **Hydra® 64HD** light. This document tells you *what to send and what comes back*. For the experimental derivation see [`myai-ble-reverse-engineering.md`](myai-ble-reverse-engineering.md); for application-level design see [`esp32-hydra64hd-controller-plan.md`](esp32-hydra64hd-controller-plan.md).
+Clean reference for the myAI / Mobius® BLE protocol as used by the Aqua Illumination **Hydra® 64HD** light. This document tells you *what to send and what comes back*.
 
-Every fact in this doc is byte-exact verified against captured hardware traces (`docs/myai-ble-reverse-engineering.md` lines 906–1149) and exercised by the host-test suite in `host_tests/tests/`.
+Every fact in this doc is byte-exact verified against captured hardware traces and exercised by the host-test suite in `host_tests/tests/`.
 
 ---
 
@@ -51,7 +51,7 @@ Total frame length: `11 + payload_len`.
 
 **CRC-16/CCITT-FALSE**: polynomial `0x1021`, init `0xFFFF`, no input/output reflection, xorout `0`. Computed over frame bytes `[1 .. 8+N]` inclusive — i.e. starting at `op_group` and ending at the last payload byte. Result stored little-endian at offsets `9+N` and `10+N`.
 
-Golden vectors (captured TX frames from `docs/myai-ble-reverse-engineering.md`):
+Golden vectors from captured TX frames:
 
 | Command          | CRC over bytes [1..8+N] |
 |------------------|-------------------------|

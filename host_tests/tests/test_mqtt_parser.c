@@ -1,5 +1,4 @@
-/* Phase 5.1b: mqtt_bridge JSON parser tests against every payload
- * shape in docs/esp32-hydra64hd-controller-plan.md L1138-L1208. */
+/* mqtt_bridge JSON parser tests for every supported command payload shape. */
 #include "unity.h"
 #include "all_tests.h"
 #include "mqtt_bridge.h"

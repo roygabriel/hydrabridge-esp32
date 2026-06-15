@@ -1,9 +1,8 @@
-/* Phase 1.4: channel_model tests pin canonical channel names, visual
- * IDs, fixture ordering, and the partial-update / replace+merge
- * semantics to the spec.
+/* channel_model tests pin canonical channel names, visual IDs, fixture
+ * ordering, and partial-update / replace+merge semantics.
  *
  * Channel ordering and visual IDs come from the captured
- * SupportedColorChannels response (RE doc line 614):
+ * SupportedColorChannels response:
  *   01 10 11 19 17 15 13 12 1e
  */
 #include "unity.h"

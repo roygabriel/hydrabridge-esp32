@@ -8,7 +8,6 @@
  * P2000 / CODESYS driver should be configured to address registers as
  * "4xxxx + 1" or "0-based" matching these constants.
  *
- * Full map mirrors docs/esp32-hydra64hd-controller-plan.md L826-L1071.
  * Result-code values are 1:1 with command_engine's ce_result_t so the
  * same number means the same thing across surfaces.
  *

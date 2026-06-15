@@ -77,9 +77,9 @@ components/
   ota_update/                Web-upload OTA + rollback cancel
   web_ui/                    HTTP server — stubbed
 docs/
-  esp32-hydra64hd-controller-plan.md   Full implementation spec
-  myai-ble-reverse-engineering.md      Capture-by-capture research log
   ble-protocol-reference.md            Clean technical reference for the BLE protocol
+  rs485-modbus-protocol.md             RS485 / Modbus command reference
+  quickstart.md                        Flashing and first-boot setup guide
 host_tests/                  Unity-based host tests for pure-C modules
 ```
 
@@ -153,8 +153,7 @@ The controller picks up the `command_seq` increment, dispatches via `command_eng
 
 - [BLE protocol reference](docs/ble-protocol-reference.md) — clean technical writeup
 - [RS485 / Modbus protocol](docs/rs485-modbus-protocol.md) — register map and command examples
-- [Implementation plan](docs/esp32-hydra64hd-controller-plan.md) — 1763-line spec
-- [Reverse-engineering log](docs/myai-ble-reverse-engineering.md) — capture-by-capture research
+- [Quickstart](docs/quickstart.md) — flashing and first-boot setup
 
 ## License
 

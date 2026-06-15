@@ -1,6 +1,4 @@
-/* Phase 1.6: preset_engine tests pin every built-in preset to the
- * exact channel values in docs/esp32-hydra64hd-controller-plan.md
- * "Preset System" (L661-L733). */
+/* preset_engine tests pin every built-in preset to exact channel values. */
 #include "unity.h"
 #include "all_tests.h"
 #include "preset_engine.h"

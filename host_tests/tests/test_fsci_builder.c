@@ -1,5 +1,4 @@
-/* Phase 1.2: byte-equal verification that fsci_build() reproduces the
- * captured TX frames from docs/myai-ble-reverse-engineering.md.
+/* Byte-equal verification that fsci_build() reproduces captured TX frames.
  *
  * Strategy: extract the 56-byte LiveDemoScene payload from each
  * captured 67-byte TX frame, feed it back into fsci_build() with the

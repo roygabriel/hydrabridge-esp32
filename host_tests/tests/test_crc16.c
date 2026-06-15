@@ -1,6 +1,5 @@
-/* Phase 1.1: CRC-16/CCITT-FALSE golden vectors lifted from
- * docs/myai-ble-reverse-engineering.md (lines 1012-1142). Each frame
- * is the exact wire payload captured during live hardware testing.
+/* CRC-16/CCITT-FALSE golden vectors. Each frame is the exact wire payload
+ * captured during live hardware testing.
  * CRC is computed over frame bytes [1 .. last-payload-byte] and
  * stored little-endian after the payload. */
 #include "unity.h"
