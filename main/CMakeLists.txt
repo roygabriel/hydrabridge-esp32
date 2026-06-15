@@ -25,4 +25,7 @@ idf_component_register(
         ha_discovery
         wifi_station
         esp_coex
+        time_service
+        sun_service
+        schedule_engine
 )

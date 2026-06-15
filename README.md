@@ -155,6 +155,7 @@ The controller picks up the `command_seq` increment, dispatches via `command_eng
 
 - [BLE protocol reference](docs/ble-protocol-reference.md) — clean technical writeup
 - [RS485 / Modbus protocol](docs/rs485-modbus-protocol.md) — register map and command examples
+- [Time, sun events, and schedules](docs/time-sun-schedules.md) — SNTP, local sunrise/sunset, and lighting schedule reference
 - [Quickstart](docs/quickstart.md) — flashing and first-boot setup
 
 ## License

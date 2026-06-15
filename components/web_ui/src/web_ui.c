@@ -36,6 +36,9 @@
 #include "mqtt_bridge.h"
 #include "modbus_interface.h"
 #include "ota_update.h"
+#include "schedule_engine.h"
+#include "sun_service.h"
+#include "time_service.h"
 #include "wifi_station.h"
 
 static const char *TAG = "web_ui";
@@ -180,7 +183,7 @@ static const char STATUS_HTML[] =
 "<main>"
 "<header><div><div class=eyebrow>Open-source light gateway</div><h1>HydraBridge ESP32</h1><p class=subhead>Local control for AquaIllumination Hydra lights over RS485 and MQTT.</p></div><nav class=toplinks><a class=linkbtn href=/api/logs>Logs</a><a class=linkbtn href=/api/status>Status JSON</a></nav></header>"
 "<section class=stats><div class=stat><span class=label>Controller</span><span id=ready class=value>--</span></div><div class=stat><span class=label>BLE State</span><span id=bleState class=\"value small\">--</span></div><div class=stat><span class=label>Lights</span><span id=lightCount class=value>0</span></div><div class=stat><span class=label>Uptime</span><span id=uptime class=\"value small\">--</span></div></section>"
-"<nav class=tabs><button class=\"tab active\" data-tab=lights>Lights</button><button class=tab data-tab=profiles>Profiles</button><button class=tab data-tab=settings>Settings</button></nav>"
+"<nav class=tabs><button class=\"tab active\" data-tab=lights>Lights</button><button class=tab data-tab=profiles>Profiles</button><button class=tab data-tab=schedules>Schedules</button><button class=tab data-tab=settings>Settings</button></nav>"
 "<section id=tab-lights class=\"tabpane active\"><div class=tabgrid>"
 "<section class=panel><div class=panel-head><div><h2>Registered Lights</h2><p>Operate paired lights and update names.</p></div><button id=refreshLights class=\"btn ghost\">Refresh</button></div><div id=lights class=\"panel-body stack\"><div class=empty>Loading lights&hellip;</div></div></section>"
 "<section class=panel><div class=panel-head><div><h2>Discovery</h2><p>Scan for nearby Mobius devices and add new lights.</p></div><button id=scanBtn class=\"btn primary\">Scan and Auto-Add</button></div><div class=panel-body><div id=scanmsg class=meta>Ready to scan for 30 seconds.</div><div class=scanbar><span id=scanProgress></span></div><div id=scanresults class=\"stack\" style=\"margin-top:12px\"></div></div></section>"
@@ -189,14 +192,20 @@ static const char STATUS_HTML[] =
 "<section class=panel><div class=panel-head><div><h2>Profile Builder</h2><p>Save channel mixes and apply them to a selected light or group.</p></div></div><div class=panel-body><div class=stack><label><span class=label>Target</span><select id=targetSelect></select></label><label><span class=label>Profile Name</span><input id=profname maxlength=16 value=reef-day></label><label><span class=label>Description</span><textarea id=profdesc maxlength=128 placeholder=\"What this profile is for\"></textarea></label><div class=split><button id=saveProfile class=\"btn primary\">Save Profile</button><button id=applyCurrent class=btn>Apply Profile</button><button id=intUp class=btn>+ Intensity</button><button id=intDown class=btn>- Intensity</button></div></div><div id=channels class=channels></div></div></section>"
 "<section class=panel><div class=panel-head><div><h2>Saved Profiles</h2><p>Apply, edit, or delete stored mixes.</p></div></div><div class=panel-body><div id=profiles class=profile-list><div class=empty>Loading profiles&hellip;</div></div></div></section>"
 "</div></section>"
+"<section id=tab-schedules class=tabpane><div class=tabgrid>"
+"<section class=panel><div class=panel-head><div><h2>Schedule Builder</h2><p>Automate profiles for a light or group.</p></div></div><div class=panel-body><div class=settings><input id=schedId type=hidden><label class=\"check wide\"><input id=schedEnabled type=checkbox checked><span><b>Enabled</b><br><span class=meta>Run this schedule when time is valid.</span></span></label><label><span class=label>Name</span><input id=schedName maxlength=32 placeholder=\"Reef day\"></label><label><span class=label>Target</span><select id=schedTarget></select></label><label><span class=label>Profile</span><select id=schedProfile></select></label><label><span class=label>Day Intensity %</span><input id=schedIntensity type=number min=0 max=100 value=70></label><label><span class=label>End Intensity %</span><input id=schedEndIntensity type=number min=0 max=100 value=0></label><label><span class=label>Start Trigger</span><select id=schedStartTrig><option value=0>Fixed time</option><option value=1>Sunrise</option><option value=2>Sunset</option></select></label><label><span class=label>End Trigger</span><select id=schedEndTrig><option value=0>Fixed time</option><option value=1>Sunrise</option><option value=2>Sunset</option></select></label><label><span class=label>Start Time</span><input id=schedStartTime type=time value=08:00></label><label><span class=label>End Time</span><input id=schedEndTime type=time value=18:00></label><label><span class=label>Start Offset Min</span><input id=schedStartOffset type=number min=-720 max=720 value=0></label><label><span class=label>End Offset Min</span><input id=schedEndOffset type=number min=-720 max=720 value=0></label><label><span class=label>Ramp Up Min</span><input id=schedRampUp type=number min=0 max=1440 value=90></label><label><span class=label>Ramp Down Min</span><input id=schedRampDown type=number min=0 max=1440 value=90></label><div class=\"split wide\"><button id=saveSchedule class=\"btn primary\">Save Schedule</button><button id=newSchedule class=btn>New</button></div></div></div></section>"
+"<section class=panel><div class=panel-head><div><h2>Saved Schedules</h2><p id=scheduleNext>Next action loading.</p></div><button id=refreshSchedules class=\"btn ghost\">Refresh</button></div><div class=panel-body><div id=schedules class=stack><div class=empty>Loading schedules&hellip;</div></div></div></section>"
+"</div></section>"
 "<section id=tab-settings class=tabpane><div class=tabgrid>"
+"<section class=panel><div class=panel-head><div><h2>Time Sync</h2><p>Keep local time for schedules and logs.</p></div><span id=timeState class=pill>Loading</span></div><div class=panel-body><div class=settings><label class=\"check wide\"><input id=timeEnabled type=checkbox><span><b>Enable NTP time sync</b><br><span class=meta>Uses SNTP and does not block local control.</span></span></label><label><span class=label>Time Server</span><input id=timeServer maxlength=64></label><label><span class=label>Timezone</span><select id=timeTz><option value=UTC0>UTC</option><option value=\"EST5EDT,M3.2.0/2,M11.1.0/2\">Eastern</option><option value=\"CST6CDT,M3.2.0/2,M11.1.0/2\">Central</option><option value=\"MST7MDT,M3.2.0/2,M11.1.0/2\">Mountain</option><option value=\"PST8PDT,M3.2.0/2,M11.1.0/2\">Pacific</option><option value=MST7>Arizona</option><option value=HST10>Hawaii</option></select></label><div class=\"split wide\"><button id=saveTime class=\"btn primary\">Save Time</button><span id=timeNow class=meta>--</span></div></div></div></section>"
+"<section class=panel><div class=panel-head><div><h2>Sun Events</h2><p>Compute sunrise and sunset locally from coordinates.</p></div><span id=sunState class=pill>Loading</span></div><div class=panel-body><div class=settings><label class=\"check wide\"><input id=sunEnabled type=checkbox><span><b>Enable sunrise/sunset triggers</b><br><span class=meta>No location data is sent to an external API.</span></span></label><label><span class=label>Location Label</span><input id=sunLabel maxlength=32></label><label><span class=label>Latitude</span><input id=sunLat type=number step=0.000001 min=-90 max=90></label><label><span class=label>Longitude</span><input id=sunLon type=number step=0.000001 min=-180 max=180></label><div class=\"split wide\"><button id=saveSun class=\"btn primary\">Save Sun Events</button><span id=sunTimes class=meta>--</span></div></div></div></section>"
 "<section class=panel><div class=panel-head><div><h2>WiFi</h2><p>Connect to your home network or use setup hotspot fallback.</p></div><span id=wifiState class=pill>Loading</span></div><div class=panel-body><div class=settings><label class=\"check wide\"><input id=wifiEnabled type=checkbox><span><b>Enable WiFi station</b><br><span class=meta>Connects to the configured home WiFi.</span></span></label><label><span class=label>SSID</span><input id=wifiSsid maxlength=32 autocomplete=off></label><label><span class=label>Password</span><input id=wifiPass maxlength=64 type=password autocomplete=current-password></label><label class=\"check wide\"><input id=wifiApFallback type=checkbox><span><b>Setup hotspot fallback</b><br><span class=meta>Starts setup AP if no WiFi is configured or connection fails.</span></span></label><label><span class=label>Setup AP Name</span><input id=wifiApSsid maxlength=32></label><label><span class=label>Setup AP Password</span><input id=wifiApPass maxlength=64 type=password></label><div class=\"split wide\"><button id=saveWifi class=\"btn primary\">Save WiFi</button><span class=meta>Setup URL: http://192.168.1.10/</span></div></div></div></section>"
 "<section class=panel><div class=panel-head><div><h2>RS485 Slave</h2><p>Allow another controller to command registered lights over Modbus RTU.</p></div><span id=rs485State class=pill>Loading</span></div><div class=panel-body><div class=settings><label class=\"check wide\"><input id=mbEnabled type=checkbox><span><b>Enable RS485 slave</b><br><span class=meta>Off by default. Saves to NVS.</span></span></label><label><span class=label>Slave Address</span><input id=mbAddr type=number min=1 max=247></label><label><span class=label>Baud Rate</span><input id=mbBaud type=number min=1200 max=921600 step=100></label><label><span class=label>Parity</span><select id=mbParity><option value=0>None</option><option value=1>Even</option><option value=2>Odd</option></select></label><label><span class=label>UART Port</span><input id=mbUart type=number min=0 max=2></label><label><span class=label>TX GPIO</span><input id=mbTx type=number min=-1 max=48></label><label><span class=label>RX GPIO</span><input id=mbRx type=number min=-1 max=48></label><label><span class=label>DE/RTS GPIO</span><input id=mbDe type=number min=-1 max=48></label><div class=\"split wide\"><button id=saveModbus class=\"btn primary\">Save RS485</button><span class=meta>Default wiring: RX 18, TX 17.</span></div></div></div></section>"
 "<section class=panel><div class=panel-head><div><h2>MQTT</h2><p>Connect HydraBridge to a local MQTT broker.</p></div><span id=mqttState class=pill>Loading</span></div><div class=panel-body><div class=settings><label class=\"check wide\"><input id=mqEnabled type=checkbox><span><b>Enable MQTT</b><br><span class=meta>Off by default. Saves to NVS.</span></span></label><label><span class=label>Broker Host</span><input id=mqHost maxlength=64 placeholder=\"192.168.1.10\"></label><label><span class=label>Port</span><input id=mqPort type=number min=1 max=65535></label><label><span class=label>Username</span><input id=mqUser maxlength=32 autocomplete=username></label><label><span class=label>Password</span><input id=mqPass maxlength=64 type=password autocomplete=current-password></label><label><span class=label>Client ID</span><input id=mqClient maxlength=32></label><label><span class=label>Keepalive Sec</span><input id=mqKeepalive type=number min=15 max=3600></label><label><span class=label>Base Topic</span><input id=mqBase maxlength=32></label><label><span class=label>HA Discovery Prefix</span><input id=mqHaPrefix maxlength=32></label><label class=\"check wide\"><input id=mqTls type=checkbox><span><b>Use TLS</b><br><span class=meta>Uses mqtts on the selected port.</span></span></label><label class=\"check wide\"><input id=mqHa type=checkbox><span><b>Home Assistant friendly</b><br><span class=meta>Publish MQTT discovery entities when connected.</span></span></label><div class=\"split wide\"><button id=saveMqtt class=\"btn primary\">Save MQTT</button><span class=meta>Commands use base/controller/light/&lt;id&gt;/set and group/&lt;id&gt;/set.</span></div></div></div></section>"
 "</div></section><div id=toast class=toast></div></main>"
 "<script>"
 "const $=id=>document.getElementById(id);"
-"let appLights=[];let appGroups=[];"
+"let appLights=[];let appGroups=[];let appProfiles=[];let appSchedules=[];"
 "const channelNames=['brightness','coolwhite','blue','deepred','violet','uv','green','royalblue','moonlight'];"
 "const channelLabels=['Brightness','Cool White','Blue','Deep Red','Violet','UV','Green','Royal Blue','Moonlight'];"
 "const stateNames={0:'Disabled',1:'Idle',3:'Connecting',4:'Discovering',5:'Subscribing',7:'Ready',8:'Writing',9:'Waiting Confirm',10:'Cooldown',11:'Disconnecting',12:'Error',13:'Backoff'};"
@@ -209,9 +218,11 @@ static const char STATUS_HTML[] =
 "const jdel=u=>fetchJson(u,{method:'DELETE'});"
 "function fmtUptime(ms){let s=Math.floor((ms||0)/1000),h=Math.floor(s/3600),m=Math.floor((s%3600)/60);return h?`${h}h ${m}m`:`${m}m ${s%60}s`;}"
 "function bleDot(st){if(st===7)return'ready';if(st===12||st===13)return'err';if(st&&st!==1)return'busy';return'';}"
-"async function refreshStatus(){try{const s=await jget('/api/status');$('ready').textContent=s.controller_ready?'Ready':'Offline';$('lightCount').textContent=s.registered_lights||0;$('uptime').textContent=fmtUptime(s.uptime_ms);$('bleState').textContent=stateNames[s.ble_state]||String(s.ble_state);}catch(e){$('ready').textContent='Error';$('bleState').textContent='Status failed';}}"
+"async function refreshStatus(){try{const s=await jget('/api/status');$('ready').textContent=s.controller_ready?'Ready':'Offline';$('lightCount').textContent=s.registered_lights||0;$('uptime').textContent=fmtUptime(s.uptime_ms);$('bleState').textContent=stateNames[s.ble_state]||String(s.ble_state);if($('scheduleNext'))$('scheduleNext').textContent=s.next_schedule_action||'No scheduled action';}catch(e){$('ready').textContent='Error';$('bleState').textContent='Status failed';}}"
 "function addMeta(parent,items){const m=el('div','meta');for(const it of items){const p=el('span','pill',it);m.appendChild(p);}parent.appendChild(m);}"
-"function refreshTargetSelect(){const sel=$('targetSelect');if(!sel)return;const old=sel.value;sel.innerHTML='';for(const l of appLights){const o=document.createElement('option');o.value='light:'+l.light_id;o.textContent='Light: '+(l.display_name||l.light_id);sel.appendChild(o);}for(const g of appGroups){const o=document.createElement('option');o.value='group:'+g.group_id;o.textContent='Group: '+(g.display_name||g.group_id);sel.appendChild(o);}if(old)sel.value=old;if(!sel.value&&sel.options.length)sel.selectedIndex=0;}"
+"function fillTargetSelect(sel){if(!sel)return;const old=sel.value;sel.innerHTML='';for(const l of appLights){const o=document.createElement('option');o.value='light:'+l.light_id;o.textContent='Light: '+(l.display_name||l.light_id);sel.appendChild(o);}for(const g of appGroups){const o=document.createElement('option');o.value='group:'+g.group_id;o.textContent='Group: '+(g.display_name||g.group_id);sel.appendChild(o);}if(old)sel.value=old;if(!sel.value&&sel.options.length)sel.selectedIndex=0;}"
+"function refreshTargetSelect(){fillTargetSelect($('targetSelect'));fillTargetSelect($('schedTarget'));}"
+"function refreshScheduleProfileOptions(){const sel=$('schedProfile');if(!sel)return;const old=sel.value;sel.innerHTML='';for(const p of appProfiles){const o=document.createElement('option');o.value=p.name;o.textContent=p.name;sel.appendChild(o);}if(old)sel.value=old;if(!sel.value&&sel.options.length)sel.selectedIndex=0;}"
 "function renderGroupMembers(){const box=$('groupMembers');if(!box)return;box.innerHTML='';if(!appLights.length){box.appendChild(el('div','empty','Add lights before creating a group.'));return;}for(const l of appLights){const lab=el('label','check');const cb=document.createElement('input');cb.type='checkbox';cb.value=l.light_id;cb.className='groupMember';lab.appendChild(cb);lab.appendChild(el('span',null,l.display_name||l.light_id));box.appendChild(lab);}}"
 "async function refreshLights(){try{const r=await jget('/api/lights');appLights=r.lights||[];const box=$('lights');box.innerHTML='';if(!appLights.length){box.appendChild(el('div','empty','No registered lights yet. Start a discovery scan to add one.'));}else{for(const l of appLights)box.appendChild(lightRow(l));}renderGroupMembers();refreshTargetSelect();}catch(e){toast('Lights failed: '+e.message);}}"
 "function lightRow(l){const row=el('article','row');const left=el('div');const title=el('div','row-title');const dot=el('span','dot');title.appendChild(dot);title.appendChild(el('span','name',l.display_name||l.light_id));title.appendChild(el('span','pill',l.enabled?'Enabled':'Disabled'));left.appendChild(title);addMeta(left,[modelLabel(l.model),l.serial||'No serial','RSSI '+l.last_seen_rssi,l.light_id]);const ren=el('div','rename');const inp=document.createElement('input');inp.value=l.display_name||'';inp.maxLength=32;inp.setAttribute('aria-label','Light name');const save=el('button','btn','Save Name');save.onclick=()=>renameLight(l.light_id,inp.value);ren.appendChild(inp);ren.appendChild(save);left.appendChild(ren);const act=el('div','actions');[['On',()=>cmd(l.light_id,'on'),'good'],['Off',()=>cmd(l.light_id,'off'),'danger'],['+ Int',()=>intensity(l.light_id,50),''],['- Int',()=>intensity(l.light_id,-50),''],['Remove',()=>removeLight(l.light_id),'ghost']].forEach(a=>{const b=el('button','btn '+a[2],a[0]);b.onclick=a[1];act.appendChild(b);});row.appendChild(left);row.appendChild(act);return row;}"
@@ -233,12 +244,27 @@ static const char STATUS_HTML[] =
 "function buildChannels(){const box=$('channels');box.innerHTML='';channelNames.forEach((n,i)=>{const c=el('label','channel');c.appendChild(el('b',null,channelLabels[i]));const range=document.createElement('input');range.type='range';range.min=0;range.max=1000;range.value=i===0?1000:0;range.id='ch'+i;const num=document.createElement('input');num.type='number';num.min=0;num.max=1000;num.value=range.value;range.oninput=()=>num.value=range.value;num.oninput=()=>range.value=Math.max(0,Math.min(1000,parseInt(num.value)||0));c.appendChild(range);c.appendChild(num);box.appendChild(c);});}"
 "function profileBody(name){const desc=($('profdesc').value||'').trim();const b={name:name,description:desc};for(let j=0;j<9;j++)b[channelNames[j]]=parseInt($('ch'+j).value)||0;return b;}"
 "async function saveProfile(){const name=($('profname').value||'profile').trim();const desc=($('profdesc').value||'').trim();if(!name)return toast('Profile name is required');if(/[\"\\\\<>]/.test(name+desc))return toast('Profile text cannot contain quotes, backslashes, <, or >');try{await jpost('/api/profiles',profileBody(name));toast('Profile saved');refreshProfiles();}catch(e){toast('Save failed: '+e.message);}}"
-"async function refreshProfiles(){try{const r=await jget('/api/profiles');const box=$('profiles');box.innerHTML='';const ps=r.profiles||[];if(!ps.length){box.appendChild(el('div','empty','No profiles saved yet.'));return;}for(const pr of ps)box.appendChild(profileRow(pr));}catch(e){toast('Profiles failed: '+e.message);}}"
+"async function refreshProfiles(){try{const r=await jget('/api/profiles');const box=$('profiles');box.innerHTML='';const ps=r.profiles||[];appProfiles=ps;refreshScheduleProfileOptions();if(!ps.length){box.appendChild(el('div','empty','No profiles saved yet.'));return;}for(const pr of ps)box.appendChild(profileRow(pr));}catch(e){toast('Profiles failed: '+e.message);}}"
 "function profileRow(pr){const row=el('article','row');const left=el('div');const title=el('div','row-title');title.appendChild(el('span','name',pr.name));if(pr.builtin)title.appendChild(el('span','pill','Built-in'));left.appendChild(title);if(pr.description)left.appendChild(el('div','desc',pr.description));const bars=el('div','profile-bars');(pr.intensities||[]).forEach(v=>{const b=el('div','bar');const s=document.createElement('span');s.style.height=Math.max(3,Math.min(100,Math.round((v||0)/10)))+'%';b.appendChild(s);bars.appendChild(b);});left.appendChild(bars);const act=el('div','actions');let actions=[['Apply',()=>applyProfile(pr.name),'primary'],['Load',()=>loadProfile(pr),'']];if(!pr.builtin)actions.push(['Delete',()=>delProfile(pr.name),'danger']);actions.forEach(a=>{const b=el('button','btn '+a[2],a[0]);b.onclick=a[1];act.appendChild(b);});row.appendChild(left);row.appendChild(act);return row;}"
 "function loadProfile(pr){$('profname').value=pr.name;$('profdesc').value=pr.description||'';(pr.intensities||[]).forEach((v,i)=>{const r=$('ch'+i);if(r){r.value=v;const n=r.parentNode.querySelector('input[type=number]');if(n)n.value=v;}});toast('Profile loaded');}"
 "async function applyProfile(name){const t=currentTarget();if(!t.id)return toast('Select a target first');try{await jpost(targetUrl(t),{profile:name,timeout:60});toast(t.type==='group'?'Group profile queued':'Profile queued');}catch(e){toast('Apply failed: '+e.message);}}"
 "async function intensityTarget(t,delta){try{await jpost(targetUrl(t),{intensity_delta:delta,timeout:60});toast('Intensity command queued');}catch(e){toast('Intensity failed: '+e.message);}}"
 "async function delProfile(name){if(!confirm('Delete '+name+'?'))return;try{await jdel('/api/profiles/'+encodeURIComponent(name));toast('Profile deleted');refreshProfiles();}catch(e){toast('Delete failed: '+e.message);}}"
+"function minToTime(m){m=parseInt(m)||0;return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0');}"
+"function timeToMin(v){const p=(v||'00:00').split(':');return (parseInt(p[0])||0)*60+(parseInt(p[1])||0);}"
+"function parseTargetValue(v){const p=(v||'').split(':');return{type:p[0]==='group'?1:0,id:p.slice(1).join(':')};}"
+"function clearScheduleForm(){$('schedId').value='';$('schedEnabled').checked=true;$('schedName').value='';$('schedIntensity').value=70;$('schedEndIntensity').value=0;$('schedStartTrig').value=0;$('schedEndTrig').value=0;$('schedStartTime').value='08:00';$('schedEndTime').value='18:00';$('schedStartOffset').value=0;$('schedEndOffset').value=0;$('schedRampUp').value=90;$('schedRampDown').value=90;refreshTargetSelect();refreshScheduleProfileOptions();}"
+"function scheduleBody(){const t=parseTargetValue($('schedTarget').value);return{schedule_id:$('schedId').value||'',enabled:$('schedEnabled').checked,name:($('schedName').value||'Schedule').trim(),target_type:t.type,target_id:t.id,profile_name:$('schedProfile').value||'',intensity_percent:parseInt($('schedIntensity').value)||0,end_intensity_percent:parseInt($('schedEndIntensity').value)||0,start_trigger:parseInt($('schedStartTrig').value)||0,end_trigger:parseInt($('schedEndTrig').value)||0,start_minute:timeToMin($('schedStartTime').value),end_minute:timeToMin($('schedEndTime').value),start_offset_min:parseInt($('schedStartOffset').value)||0,end_offset_min:parseInt($('schedEndOffset').value)||0,ramp_up_min:parseInt($('schedRampUp').value)||0,ramp_down_min:parseInt($('schedRampDown').value)||0};}"
+"async function saveSchedule(){const b=scheduleBody();if(!b.target_id)return toast('Select a schedule target');if(!b.profile_name)return toast('Select a profile');if(/[\"\\\\<>]/.test(b.name+b.target_id+b.profile_name))return toast('Schedule text cannot contain quotes, backslashes, <, or >');try{const r=await jpost('/api/schedules',b);$('schedId').value=r.schedule_id||'';toast('Schedule saved');refreshSchedules();}catch(e){toast('Schedule save failed: '+e.message);}}"
+"async function refreshSchedules(){try{const r=await jget('/api/schedules');appSchedules=r.schedules||[];$('scheduleNext').textContent=r.next_action||'No scheduled action';const box=$('schedules');box.innerHTML='';if(!appSchedules.length){box.appendChild(el('div','empty','No schedules yet.'));return;}for(const s of appSchedules)box.appendChild(scheduleRow(s));}catch(e){toast('Schedules failed: '+e.message);}}"
+"function trigLabel(v){return({0:'Fixed',1:'Sunrise',2:'Sunset'})[v]||String(v);}"
+"function scheduleRow(s){const row=el('article','row');const left=el('div');const title=el('div','row-title');title.appendChild(el('span','name',s.name||s.schedule_id));title.appendChild(el('span','pill',s.enabled?'Enabled':'Disabled'));left.appendChild(title);const target=(s.target_type===1?'Group ':'Light ')+(s.target_id||'');addMeta(left,[target,s.profile_name||'No profile',(s.intensity_percent||0)+'%','Start '+trigLabel(s.start_trigger)+' '+minToTime(s.start_minute||0),'End '+trigLabel(s.end_trigger)+' '+minToTime(s.end_minute||0)]);const act=el('div','actions');[['Edit',()=>loadSchedule(s),'primary'],['Delete',()=>deleteSchedule(s.schedule_id),'danger']].forEach(a=>{const b=el('button','btn '+a[2],a[0]);b.onclick=a[1];act.appendChild(b);});row.appendChild(left);row.appendChild(act);return row;}"
+"function loadSchedule(s){$('schedId').value=s.schedule_id||'';$('schedEnabled').checked=!!s.enabled;$('schedName').value=s.name||'';$('schedTarget').value=(s.target_type===1?'group:':'light:')+(s.target_id||'');$('schedProfile').value=s.profile_name||'';$('schedIntensity').value=s.intensity_percent||0;$('schedEndIntensity').value=s.end_intensity_percent||0;$('schedStartTrig').value=s.start_trigger||0;$('schedEndTrig').value=s.end_trigger||0;$('schedStartTime').value=minToTime(s.start_minute||0);$('schedEndTime').value=minToTime(s.end_minute||0);$('schedStartOffset').value=s.start_offset_min||0;$('schedEndOffset').value=s.end_offset_min||0;$('schedRampUp').value=s.ramp_up_min||0;$('schedRampDown').value=s.ramp_down_min||0;document.querySelector('[data-tab=schedules]').click();}"
+"async function deleteSchedule(id){if(!confirm('Delete schedule '+id+'?'))return;try{await jdel('/api/schedules/'+encodeURIComponent(id));toast('Schedule deleted');clearScheduleForm();refreshSchedules();}catch(e){toast('Delete schedule failed: '+e.message);}}"
+"async function refreshTimeConfig(){try{const r=await jget('/api/config/time');$('timeEnabled').checked=!!r.enabled;$('timeServer').value=r.server||'time.nist.gov';$('timeTz').value=r.timezone||'UTC0';$('timeState').textContent=r.synced?'Synced':'Unsynced';$('timeNow').textContent=(r.current_local||'--')+' last sync '+(r.last_sync_local||'--');}catch(e){$('timeState').textContent='Config failed';toast('Time config failed: '+e.message);}}"
+"async function saveTimeConfig(){const b={enabled:$('timeEnabled').checked,server:($('timeServer').value||'time.nist.gov').trim(),timezone:$('timeTz').value||'UTC0'};try{await jpost('/api/config/time',b);toast('Time settings saved');refreshTimeConfig();refreshStatus();}catch(e){toast('Time save failed: '+e.message);}}"
+"async function refreshSunConfig(){try{const r=await jget('/api/config/sun');$('sunEnabled').checked=!!r.enabled;$('sunLabel').value=r.location_label||'My Reef';$('sunLat').value=r.latitude||0;$('sunLon').value=r.longitude||0;$('sunState').textContent=r.valid?'Ready':'Waiting';$('sunTimes').textContent='Sunrise '+(r.sunrise_local||'--:--')+' / Sunset '+(r.sunset_local||'--:--');}catch(e){$('sunState').textContent='Config failed';toast('Sun config failed: '+e.message);}}"
+"async function saveSunConfig(){const b={enabled:$('sunEnabled').checked,location_label:($('sunLabel').value||'My Reef').trim(),latitude:parseFloat($('sunLat').value)||0,longitude:parseFloat($('sunLon').value)||0};try{await jpost('/api/config/sun',b);toast('Sun settings saved');refreshSunConfig();refreshSchedules();}catch(e){toast('Sun save failed: '+e.message);}}"
 "function wifiModeLabel(m){return({0:'Off',1:'Station',2:'Setup AP',3:'Station + AP'})[m]||String(m);}"
 "async function refreshWifiConfig(){try{const r=await jget('/api/config/wifi');$('wifiEnabled').checked=!!r.enabled;$('wifiSsid').value=r.ssid||'';$('wifiPass').value=r.password_set?'********':'';$('wifiApFallback').checked=!!r.ap_fallback_enabled;$('wifiApSsid').value=r.ap_ssid||'HydraBridge-Setup';$('wifiApPass').value=r.ap_password_set?'********':'';$('wifiState').textContent=wifiModeLabel(r.mode)+(r.connected?' Connected':'');}catch(e){$('wifiState').textContent='Config failed';toast('WiFi config failed: '+e.message);}}"
 "async function saveWifiConfig(){const pass=$('wifiPass').value,apPass=$('wifiApPass').value;const b={enabled:$('wifiEnabled').checked,ssid:($('wifiSsid').value||'').trim(),ap_fallback_enabled:$('wifiApFallback').checked,ap_ssid:($('wifiApSsid').value||'HydraBridge-Setup').trim()};if(pass!=='********')b.password=pass;if(apPass!=='********')b.ap_password=apPass;try{await jpost('/api/config/wifi',b);toast('WiFi settings saved');refreshWifiConfig();refreshStatus();}catch(e){toast('WiFi save failed: '+e.message);}}"
@@ -248,9 +274,9 @@ static const char STATUS_HTML[] =
 "function mqttStatusLabel(s){return({0:'Disabled',1:'Disconnected',2:'Connected'})[s]||String(s);}"
 "async function refreshMqttConfig(){try{const r=await jget('/api/config/mqtt');$('mqEnabled').checked=!!r.enabled;$('mqHost').value=r.host||'';$('mqPort').value=r.port||1883;$('mqTls').checked=!!r.use_tls;$('mqUser').value=r.username||'';$('mqPass').value=r.password_set?'********':'';$('mqClient').value=r.client_id||'';$('mqKeepalive').value=r.keepalive_sec||60;$('mqBase').value=r.base_topic||'aihydra';$('mqHa').checked=!!r.home_assistant_discovery;$('mqHaPrefix').value=r.home_assistant_prefix||'homeassistant';$('mqttState').textContent=mqttStatusLabel(r.status);}catch(e){$('mqttState').textContent='Config failed';toast('MQTT config failed: '+e.message);}}"
 "async function saveMqttConfig(){const pass=$('mqPass').value;const b={enabled:$('mqEnabled').checked,host:($('mqHost').value||'').trim(),port:parseInt($('mqPort').value)||1883,use_tls:$('mqTls').checked,username:($('mqUser').value||'').trim(),client_id:($('mqClient').value||'').trim(),keepalive_sec:parseInt($('mqKeepalive').value)||60,base_topic:($('mqBase').value||'aihydra').trim(),home_assistant_discovery:$('mqHa').checked,home_assistant_prefix:($('mqHaPrefix').value||'homeassistant').trim()};if(pass!=='********')b.password=pass;try{const r=await jpost('/api/config/mqtt',b);toast(r.applied?'MQTT settings applied':'MQTT settings saved');refreshMqttConfig();refreshStatus();}catch(e){toast('MQTT save failed: '+e.message);}}"
-"$('scanBtn').onclick=startScan;$('refreshLights').onclick=refreshLights;$('saveProfile').onclick=saveProfile;$('applyCurrent').onclick=()=>applyProfile(($('profname').value||'').trim());$('intUp').onclick=()=>intensityDelta(50);$('intDown').onclick=()=>intensityDelta(-50);$('saveWifi').onclick=saveWifiConfig;$('saveModbus').onclick=saveModbusConfig;$('saveMqtt').onclick=saveMqttConfig;"
+"$('scanBtn').onclick=startScan;$('refreshLights').onclick=refreshLights;$('saveProfile').onclick=saveProfile;$('applyCurrent').onclick=()=>applyProfile(($('profname').value||'').trim());$('intUp').onclick=()=>intensityDelta(50);$('intDown').onclick=()=>intensityDelta(-50);$('saveSchedule').onclick=saveSchedule;$('newSchedule').onclick=clearScheduleForm;$('refreshSchedules').onclick=refreshSchedules;$('saveTime').onclick=saveTimeConfig;$('saveSun').onclick=saveSunConfig;$('saveWifi').onclick=saveWifiConfig;$('saveModbus').onclick=saveModbusConfig;$('saveMqtt').onclick=saveMqttConfig;"
 "$('refreshGroups').onclick=refreshGroups;$('saveGroup').onclick=saveGroup;document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));document.querySelectorAll('.tabpane').forEach(x=>x.classList.remove('active'));b.classList.add('active');$('tab-'+b.dataset.tab).classList.add('active');});"
-"buildChannels();refreshStatus();refreshLights();refreshGroups();refreshProfiles();refreshWifiConfig();refreshModbusConfig();refreshMqttConfig();setInterval(refreshStatus,3000);setInterval(refreshProfiles,10000);setInterval(refreshWifiConfig,10000);setInterval(refreshModbusConfig,10000);setInterval(refreshMqttConfig,10000);"
+"buildChannels();clearScheduleForm();refreshStatus();refreshLights();refreshGroups();refreshProfiles();refreshSchedules();refreshTimeConfig();refreshSunConfig();refreshWifiConfig();refreshModbusConfig();refreshMqttConfig();setInterval(refreshStatus,3000);setInterval(refreshProfiles,10000);setInterval(refreshSchedules,10000);setInterval(refreshTimeConfig,10000);setInterval(refreshSunConfig,10000);setInterval(refreshWifiConfig,10000);setInterval(refreshModbusConfig,10000);setInterval(refreshMqttConfig,10000);"
 "</script></body></html>";
 
 static esp_err_t get_root(httpd_req_t *req)
@@ -261,17 +287,38 @@ static esp_err_t get_root(httpd_req_t *req)
 
 static esp_err_t get_status(httpd_req_t *req)
 {
-    char buf[256];
+    time_service_status_t ts;
+    sun_service_status_t sun;
+    schedule_engine_status_t sched;
+    time_service_get_status(&ts);
+    sun_service_get_status(&sun);
+    schedule_engine_get_status(&sched);
+
+    char buf[1024];
     snprintf(buf, sizeof buf,
         "{\"controller_ready\":true,"
         "\"registered_lights\":%u,"
         "\"registered_groups\":%u,"
         "\"ble_state\":%d,"
-        "\"uptime_ms\":%lu}",
+        "\"uptime_ms\":%lu,"
+        "\"time_synced\":%s,"
+        "\"current_epoch\":%lld,"
+        "\"current_local\":\"%s\","
+        "\"last_time_sync_epoch\":%lld,"
+        "\"sunrise_local\":\"%s\","
+        "\"sunset_local\":\"%s\","
+        "\"next_schedule_action\":\"%s\"}",
         (unsigned)light_registry_count(),
         (unsigned)group_registry_count(),
         (int)ble_light_client_current_state(),
-        (unsigned long)esp_log_timestamp());
+        (unsigned long)esp_log_timestamp(),
+        ts.synced ? "true" : "false",
+        (long long)ts.current_epoch,
+        ts.current_local,
+        (long long)ts.last_sync_epoch,
+        sun.sunrise_local,
+        sun.sunset_local,
+        sched.next_action);
     return send_json(req, buf);
 }
 
@@ -529,6 +576,29 @@ static int json_get_bool(const char *json, const char *key, bool *out)
         return 0;
     }
     return -1;
+}
+
+static int json_get_double_scaled_e7(const char *json, const char *key, int32_t *out)
+{
+    char pat[64];
+    snprintf(pat, sizeof pat, "\"%s\"", key);
+    const char *p = strstr(json, pat);
+    if (!p) return -1;
+    p = strchr(p + strlen(pat), ':');
+    if (!p) return -1;
+    ++p;
+    while (*p == ' ' || *p == '\t') ++p;
+    char *end = NULL;
+    double v = strtod(p, &end);
+    if (end == p) return -1;
+    if (v < -180.0 || v > 180.0) return -1;
+    *out = (int32_t)(v * 10000000.0 + (v >= 0 ? 0.5 : -0.5));
+    return 0;
+}
+
+static double e7_to_double(int32_t v)
+{
+    return (double)v / 10000000.0;
 }
 
 static bool safe_display_name(const char *s)
@@ -1157,6 +1227,369 @@ static esp_err_t post_mqtt_config(httpd_req_t *req)
     return send_json(req, out);
 }
 
+/* ===== Time / sun / schedule config ===== */
+
+static esp_err_t get_time_config(httpd_req_t *req)
+{
+    config_time_t cfg;
+    config_store_load_time(&cfg);
+    time_service_status_t st;
+    time_service_get_status(&st);
+    char buf[512];
+    snprintf(buf, sizeof buf,
+        "{\"enabled\":%s,"
+        "\"server\":\"%s\","
+        "\"timezone\":\"%s\","
+        "\"synced\":%s,"
+        "\"current_epoch\":%lld,"
+        "\"current_local\":\"%s\","
+        "\"last_sync_epoch\":%lld,"
+        "\"last_sync_local\":\"%s\"}",
+        cfg.enabled ? "true" : "false",
+        cfg.server,
+        cfg.timezone,
+        st.synced ? "true" : "false",
+        (long long)st.current_epoch,
+        st.current_local,
+        (long long)st.last_sync_epoch,
+        st.last_sync_local);
+    return send_json(req, buf);
+}
+
+static esp_err_t post_time_config(httpd_req_t *req)
+{
+    char body[512];
+    int total = 0;
+    while (total < (int)sizeof body - 1) {
+        int got = httpd_req_recv(req, body + total, sizeof body - 1 - total);
+        if (got <= 0) break;
+        total += got;
+    }
+    body[total < 0 ? 0 : total] = '\0';
+
+    config_time_t cfg;
+    config_store_load_time(&cfg);
+    bool b = false;
+    if (json_get_bool(body, "enabled", &b) == 0) cfg.enabled = b;
+    char s[CONFIG_TZ_LEN];
+    if (json_get_str(body, "server", s, sizeof s) == 0) {
+        strncpy(cfg.server, s, sizeof cfg.server - 1);
+        cfg.server[sizeof cfg.server - 1] = '\0';
+    }
+    if (json_get_str(body, "timezone", s, sizeof s) == 0) {
+        strncpy(cfg.timezone, s, sizeof cfg.timezone - 1);
+        cfg.timezone[sizeof cfg.timezone - 1] = '\0';
+    }
+    if (cfg.enabled && cfg.server[0] == '\0') {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "enabled time sync requires server");
+        return ESP_FAIL;
+    }
+    if (!safe_mqtt_text(cfg.server, !cfg.enabled, false) ||
+        !safe_profile_text(cfg.timezone, false)) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "bad time text");
+        return ESP_FAIL;
+    }
+    if (config_store_save_time(&cfg) != ESP_OK) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "save failed");
+        return ESP_FAIL;
+    }
+    esp_err_t err = time_service_reconfigure();
+    if (err != ESP_OK) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "reconfigure failed");
+        return ESP_FAIL;
+    }
+    return send_json(req, "{\"saved\":true,\"applied\":true}");
+}
+
+static esp_err_t get_sun_config(httpd_req_t *req)
+{
+    config_sun_t cfg;
+    config_store_load_sun(&cfg);
+    sun_service_status_t st;
+    sun_service_get_status(&st);
+    char buf[640];
+    snprintf(buf, sizeof buf,
+        "{\"enabled\":%s,"
+        "\"location_label\":\"%s\","
+        "\"latitude\":%.7f,"
+        "\"longitude\":%.7f,"
+        "\"valid\":%s,"
+        "\"sunrise_local\":\"%s\","
+        "\"sunset_local\":\"%s\","
+        "\"sunrise_minute\":%d,"
+        "\"sunset_minute\":%d}",
+        cfg.enabled ? "true" : "false",
+        cfg.location_label,
+        e7_to_double(cfg.latitude_e7),
+        e7_to_double(cfg.longitude_e7),
+        st.valid ? "true" : "false",
+        st.sunrise_local,
+        st.sunset_local,
+        st.sunrise_minute,
+        st.sunset_minute);
+    return send_json(req, buf);
+}
+
+static esp_err_t post_sun_config(httpd_req_t *req)
+{
+    char body[512];
+    int total = 0;
+    while (total < (int)sizeof body - 1) {
+        int got = httpd_req_recv(req, body + total, sizeof body - 1 - total);
+        if (got <= 0) break;
+        total += got;
+    }
+    body[total < 0 ? 0 : total] = '\0';
+
+    config_sun_t cfg;
+    config_store_load_sun(&cfg);
+    bool b = false;
+    if (json_get_bool(body, "enabled", &b) == 0) cfg.enabled = b;
+    char label[CONFIG_LOCATION_LABEL_LEN];
+    if (json_get_str(body, "location_label", label, sizeof label) == 0) {
+        strncpy(cfg.location_label, label, sizeof cfg.location_label - 1);
+        cfg.location_label[sizeof cfg.location_label - 1] = '\0';
+    }
+    int32_t e7 = 0;
+    if (json_get_double_scaled_e7(body, "latitude", &e7) == 0) cfg.latitude_e7 = e7;
+    if (json_get_double_scaled_e7(body, "longitude", &e7) == 0) cfg.longitude_e7 = e7;
+
+    if (!safe_profile_text(cfg.location_label, false)) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "bad location label");
+        return ESP_FAIL;
+    }
+    if (cfg.latitude_e7 < -900000000 || cfg.latitude_e7 > 900000000 ||
+        cfg.longitude_e7 < -1800000000 || cfg.longitude_e7 > 1800000000) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "bad coordinates");
+        return ESP_FAIL;
+    }
+    if (config_store_save_sun(&cfg) != ESP_OK) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "save failed");
+        return ESP_FAIL;
+    }
+    esp_err_t err = sun_service_reconfigure();
+    if (err == ESP_OK) err = schedule_engine_reconfigure();
+    if (err != ESP_OK) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "reconfigure failed");
+        return ESP_FAIL;
+    }
+    return send_json(req, "{\"saved\":true,\"applied\":true}");
+}
+
+static void make_schedule_id(const config_schedules_t *cfg, char out[CONFIG_SCHEDULE_ID_LEN])
+{
+    for (unsigned n = 1; n < 1000; ++n) {
+        char candidate[CONFIG_SCHEDULE_ID_LEN];
+        snprintf(candidate, sizeof candidate, "sch-%u", n);
+        bool used = false;
+        if (cfg) {
+            for (uint8_t i = 0; i < cfg->count; ++i) {
+                if (strcmp(cfg->schedules[i].schedule_id, candidate) == 0) {
+                    used = true;
+                    break;
+                }
+            }
+        }
+        if (!used) {
+            strncpy(out, candidate, CONFIG_SCHEDULE_ID_LEN - 1);
+            out[CONFIG_SCHEDULE_ID_LEN - 1] = '\0';
+            return;
+        }
+    }
+    strncpy(out, "sch-new", CONFIG_SCHEDULE_ID_LEN - 1);
+    out[CONFIG_SCHEDULE_ID_LEN - 1] = '\0';
+}
+
+static bool schedule_text_ok(const char *s, bool allow_empty)
+{
+    return safe_profile_text(s, allow_empty);
+}
+
+static esp_err_t get_schedules(httpd_req_t *req)
+{
+    config_schedules_t cfg;
+    config_store_load_schedules(&cfg);
+    schedule_engine_status_t st;
+    schedule_engine_get_status(&st);
+    char buf[8192];
+    size_t off = 0;
+    off += snprintf(buf + off, sizeof buf - off,
+        "{\"running\":%s,\"next_action\":\"%s\",\"schedules\":[",
+        st.running ? "true" : "false", st.next_action);
+    for (uint8_t i = 0; i < cfg.count && off < sizeof buf - 512; ++i) {
+        const config_schedule_t *s = &cfg.schedules[i];
+        off += snprintf(buf + off, sizeof buf - off,
+            "%s{\"enabled\":%s,\"schedule_id\":\"%s\",\"name\":\"%s\","
+            "\"target_type\":%u,\"target_id\":\"%s\",\"profile_name\":\"%s\","
+            "\"intensity_percent\":%u,\"end_intensity_percent\":%u,"
+            "\"start_trigger\":%u,\"end_trigger\":%u,"
+            "\"start_minute\":%u,\"end_minute\":%u,"
+            "\"start_offset_min\":%d,\"end_offset_min\":%d,"
+            "\"ramp_up_min\":%u,\"ramp_down_min\":%u}",
+            i == 0 ? "" : ",",
+            s->enabled ? "true" : "false",
+            s->schedule_id,
+            s->name,
+            (unsigned)s->target_type,
+            s->target_id,
+            s->profile_name,
+            (unsigned)s->intensity_percent,
+            (unsigned)s->end_intensity_percent,
+            (unsigned)s->start_trigger,
+            (unsigned)s->end_trigger,
+            (unsigned)s->start_minute,
+            (unsigned)s->end_minute,
+            (int)s->start_offset_min,
+            (int)s->end_offset_min,
+            (unsigned)s->ramp_up_min,
+            (unsigned)s->ramp_down_min);
+    }
+    snprintf(buf + off, sizeof buf - off, "]}");
+    return send_json(req, buf);
+}
+
+static esp_err_t post_schedule(httpd_req_t *req)
+{
+    char body[1536];
+    int total = 0;
+    while (total < (int)sizeof body - 1) {
+        int got = httpd_req_recv(req, body + total, sizeof body - 1 - total);
+        if (got <= 0) break;
+        total += got;
+    }
+    body[total < 0 ? 0 : total] = '\0';
+
+    config_schedules_t cfg;
+    config_store_load_schedules(&cfg);
+
+    char id[CONFIG_SCHEDULE_ID_LEN] = {0};
+    json_get_str(body, "schedule_id", id, sizeof id);
+    int idx = -1;
+    if (id[0]) {
+        for (uint8_t i = 0; i < cfg.count; ++i) {
+            if (strcmp(cfg.schedules[i].schedule_id, id) == 0) {
+                idx = (int)i;
+                break;
+            }
+        }
+    }
+    if (idx < 0) {
+        if (cfg.count >= MAX_SCHEDULES) {
+            httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "too many schedules");
+            return ESP_FAIL;
+        }
+        idx = cfg.count++;
+        memset(&cfg.schedules[idx], 0, sizeof cfg.schedules[idx]);
+        if (id[0]) {
+            strncpy(cfg.schedules[idx].schedule_id, id, sizeof cfg.schedules[idx].schedule_id - 1);
+        } else {
+            make_schedule_id(&cfg, cfg.schedules[idx].schedule_id);
+        }
+        cfg.schedules[idx].enabled = true;
+        cfg.schedules[idx].intensity_percent = 70;
+        cfg.schedules[idx].end_intensity_percent = 0;
+        cfg.schedules[idx].end_minute = 18 * 60;
+    }
+
+    config_schedule_t *s = &cfg.schedules[idx];
+    bool b = false;
+    if (json_get_bool(body, "enabled", &b) == 0) s->enabled = b;
+    char txt[CONFIG_PROFILE_DESC_LEN];
+    if (json_get_str(body, "name", txt, sizeof txt) == 0) {
+        strncpy(s->name, txt, sizeof s->name - 1);
+        s->name[sizeof s->name - 1] = '\0';
+    }
+    if (json_get_str(body, "target_id", txt, sizeof txt) == 0) {
+        strncpy(s->target_id, txt, sizeof s->target_id - 1);
+        s->target_id[sizeof s->target_id - 1] = '\0';
+    }
+    if (json_get_str(body, "profile_name", txt, sizeof txt) == 0) {
+        strncpy(s->profile_name, txt, sizeof s->profile_name - 1);
+        s->profile_name[sizeof s->profile_name - 1] = '\0';
+    }
+    int v = 0;
+    if (json_get_int(body, "target_type", &v) == 0) s->target_type = (uint8_t)v;
+    if (json_get_int(body, "intensity_percent", &v) == 0) s->intensity_percent = (uint8_t)v;
+    if (json_get_int(body, "end_intensity_percent", &v) == 0) s->end_intensity_percent = (uint8_t)v;
+    if (json_get_int(body, "start_trigger", &v) == 0) s->start_trigger = (uint8_t)v;
+    if (json_get_int(body, "end_trigger", &v) == 0) s->end_trigger = (uint8_t)v;
+    if (json_get_int(body, "start_minute", &v) == 0) s->start_minute = (uint16_t)v;
+    if (json_get_int(body, "end_minute", &v) == 0) s->end_minute = (uint16_t)v;
+    if (json_get_int(body, "start_offset_min", &v) == 0) s->start_offset_min = (int16_t)v;
+    if (json_get_int(body, "end_offset_min", &v) == 0) s->end_offset_min = (int16_t)v;
+    if (json_get_int(body, "ramp_up_min", &v) == 0) s->ramp_up_min = (uint16_t)v;
+    if (json_get_int(body, "ramp_down_min", &v) == 0) s->ramp_down_min = (uint16_t)v;
+
+    if (!s->name[0]) strncpy(s->name, "Schedule", sizeof s->name - 1);
+    if (!schedule_text_ok(s->schedule_id, false) ||
+        !schedule_text_ok(s->name, false) ||
+        !schedule_text_ok(s->target_id, false) ||
+        !schedule_text_ok(s->profile_name, false)) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "bad schedule text");
+        return ESP_FAIL;
+    }
+    if (s->target_type > CONFIG_SCHEDULE_TARGET_GROUP ||
+        s->intensity_percent > 100 || s->end_intensity_percent > 100 ||
+        s->start_trigger > CONFIG_SCHEDULE_TRIGGER_SUNSET ||
+        s->end_trigger > CONFIG_SCHEDULE_TRIGGER_SUNSET ||
+        s->start_minute > 1439 || s->end_minute > 1439 ||
+        s->start_offset_min < -720 || s->start_offset_min > 720 ||
+        s->end_offset_min < -720 || s->end_offset_min > 720 ||
+        s->ramp_up_min > 1440 || s->ramp_down_min > 1440) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "schedule value out of range");
+        return ESP_FAIL;
+    }
+
+    if (config_store_save_schedules(&cfg) != ESP_OK) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "save failed");
+        return ESP_FAIL;
+    }
+    esp_err_t err = schedule_engine_reconfigure();
+    if (err != ESP_OK) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "reconfigure failed");
+        return ESP_FAIL;
+    }
+    char out[128];
+    snprintf(out, sizeof out, "{\"saved\":true,\"schedule_id\":\"%s\"}", s->schedule_id);
+    return send_json(req, out);
+}
+
+static esp_err_t delete_schedule(httpd_req_t *req)
+{
+    const char *p = strstr(req->uri, "/api/schedules/");
+    if (!p) { httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "bad uri"); return ESP_FAIL; }
+    p += strlen("/api/schedules/");
+    char id[CONFIG_SCHEDULE_ID_LEN];
+    size_t i = 0;
+    while (p[i] && p[i] != '/' && i + 1 < sizeof id) { id[i] = p[i]; ++i; }
+    id[i] = '\0';
+    if (!id[0]) { httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "missing schedule_id"); return ESP_FAIL; }
+
+    config_schedules_t cfg;
+    config_store_load_schedules(&cfg);
+    int found = -1;
+    for (uint8_t k = 0; k < cfg.count; ++k) {
+        if (strcmp(cfg.schedules[k].schedule_id, id) == 0) { found = (int)k; break; }
+    }
+    if (found < 0) {
+        httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "schedule not found");
+        return ESP_FAIL;
+    }
+    for (uint8_t k = (uint8_t)found; k + 1 < cfg.count; ++k) {
+        cfg.schedules[k] = cfg.schedules[k + 1];
+    }
+    --cfg.count;
+    memset(&cfg.schedules[cfg.count], 0, sizeof cfg.schedules[cfg.count]);
+    if (config_store_save_schedules(&cfg) != ESP_OK) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "save failed");
+        return ESP_FAIL;
+    }
+    schedule_engine_reconfigure();
+    char out[96];
+    snprintf(out, sizeof out, "{\"deleted\":true,\"schedule_id\":\"%s\"}", id);
+    return send_json(req, out);
+}
+
 /* ===== profiles (named channel intensity mixes) ===== */
 
 static esp_err_t get_profiles(httpd_req_t *req)
@@ -1522,7 +1955,7 @@ esp_err_t web_ui_init(void)
 {
     httpd_config_t cfg = HTTPD_DEFAULT_CONFIG();
     cfg.uri_match_fn = httpd_uri_match_wildcard;
-    cfg.max_uri_handlers = 28;
+    cfg.max_uri_handlers = 40;
     cfg.lru_purge_enable = true;
     cfg.stack_size = 8192;
 
@@ -1552,6 +1985,13 @@ esp_err_t web_ui_init(void)
     static const httpd_uri_t r_modbus_post   = { .uri = "/api/config/modbus",    .method = HTTP_POST, .handler = post_modbus_config };
     static const httpd_uri_t r_mqtt_get      = { .uri = "/api/config/mqtt",      .method = HTTP_GET,  .handler = get_mqtt_config };
     static const httpd_uri_t r_mqtt_post     = { .uri = "/api/config/mqtt",      .method = HTTP_POST, .handler = post_mqtt_config };
+    static const httpd_uri_t r_time_get      = { .uri = "/api/config/time",      .method = HTTP_GET,  .handler = get_time_config };
+    static const httpd_uri_t r_time_post     = { .uri = "/api/config/time",      .method = HTTP_POST, .handler = post_time_config };
+    static const httpd_uri_t r_sun_get       = { .uri = "/api/config/sun",       .method = HTTP_GET,  .handler = get_sun_config };
+    static const httpd_uri_t r_sun_post      = { .uri = "/api/config/sun",       .method = HTTP_POST, .handler = post_sun_config };
+    static const httpd_uri_t r_sched_get     = { .uri = "/api/schedules",        .method = HTTP_GET,  .handler = get_schedules };
+    static const httpd_uri_t r_sched_post    = { .uri = "/api/schedules",        .method = HTTP_POST, .handler = post_schedule };
+    static const httpd_uri_t r_sched_del     = { .uri = "/api/schedules/*",      .method = HTTP_DELETE, .handler = delete_schedule };
     static const httpd_uri_t r_profiles_get  = { .uri = "/api/profiles",         .method = HTTP_GET,  .handler = get_profiles };
     static const httpd_uri_t r_profiles_post = { .uri = "/api/profiles",         .method = HTTP_POST, .handler = post_profile };
     static const httpd_uri_t r_profile_del   = { .uri = "/api/profiles/*",       .method = HTTP_DELETE, .handler = delete_profile };
@@ -1576,6 +2016,13 @@ esp_err_t web_ui_init(void)
     httpd_register_uri_handler(s_server, &r_modbus_post);
     httpd_register_uri_handler(s_server, &r_mqtt_get);
     httpd_register_uri_handler(s_server, &r_mqtt_post);
+    httpd_register_uri_handler(s_server, &r_time_get);
+    httpd_register_uri_handler(s_server, &r_time_post);
+    httpd_register_uri_handler(s_server, &r_sun_get);
+    httpd_register_uri_handler(s_server, &r_sun_post);
+    httpd_register_uri_handler(s_server, &r_sched_get);
+    httpd_register_uri_handler(s_server, &r_sched_post);
+    httpd_register_uri_handler(s_server, &r_sched_del);
     httpd_register_uri_handler(s_server, &r_profiles_get);
     httpd_register_uri_handler(s_server, &r_profiles_post);
     httpd_register_uri_handler(s_server, &r_profile_del);

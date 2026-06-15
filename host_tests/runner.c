@@ -31,6 +31,8 @@ int main(int argc, char **argv)
     register_command_engine_tests();
     register_modbus_interface_tests();
     register_mqtt_parser_tests();
+    register_sun_service_tests();
+    register_schedule_engine_tests();
     /* Future phases append calls here:
      * register_crc16_tests();           (1.1)
      * register_fsci_builder_tests();    (1.2)

@@ -1,6 +1,7 @@
 /* config_store: NVS-backed persistence for controller / modbus / wifi /
- * mqtt / user color profiles. One namespace per category, one blob key "rec"
- * per namespace. Each blob is prefixed with a uint32_t schema_version
+ * mqtt / time / sun / schedules / user color profiles. One namespace per
+ * category, one blob key "rec" per namespace. Each blob is prefixed with a
+ * uint32_t schema_version
  * so layout changes invalidate stored data and we fall back to
  * compile-time defaults instead of dereferencing a stale struct.
  *
@@ -28,12 +29,18 @@ static const char *TAG = "config_store";
 #define NS_WIFI        "wifi_cfg"
 #define NS_MQTT        "mqtt_cfg"
 #define NS_PROFILES    "prof_cfg"
+#define NS_TIME        "time_cfg"
+#define NS_SUN         "sun_cfg"
+#define NS_SCHEDULES   "sched_cfg"
 
 static bool s_reported_controller_fallback;
 static bool s_reported_modbus_fallback;
 static bool s_reported_wifi_fallback;
 static bool s_reported_mqtt_fallback;
 static bool s_reported_profiles_fallback;
+static bool s_reported_time_fallback;
+static bool s_reported_sun_fallback;
+static bool s_reported_schedules_fallback;
 
 /* ---- blob helpers ---- */
 
@@ -118,6 +125,7 @@ static esp_err_t erase_namespace(const char *ns)
 {
     nvs_handle_t h;
     esp_err_t err = nvs_open(ns, NVS_READWRITE, &h);
+    if (err == ESP_ERR_NVS_NOT_FOUND) return ESP_OK;
     if (err != ESP_OK) return err;
     err = nvs_erase_all(h);
     if (err == ESP_OK) err = nvs_commit(h);
@@ -129,12 +137,15 @@ static esp_err_t erase_namespace(const char *ns)
 
 esp_err_t config_store_init(void)
 {
-    ESP_LOGI(TAG, "init schema versions: ctrl=%u mb=%u wifi=%u mqtt=%u prof=%u",
+    ESP_LOGI(TAG, "init schema versions: ctrl=%u mb=%u wifi=%u mqtt=%u prof=%u time=%u sun=%u sched=%u",
              (unsigned)CONFIG_SCHEMA_CONTROLLER,
              (unsigned)CONFIG_SCHEMA_MODBUS,
              (unsigned)CONFIG_SCHEMA_WIFI,
              (unsigned)CONFIG_SCHEMA_MQTT,
-             (unsigned)CONFIG_SCHEMA_PROFILES);
+             (unsigned)CONFIG_SCHEMA_PROFILES,
+             (unsigned)CONFIG_SCHEMA_TIME,
+             (unsigned)CONFIG_SCHEMA_SUN,
+             (unsigned)CONFIG_SCHEMA_SCHEDULES);
     return ESP_OK;
 }
 
@@ -243,6 +254,69 @@ esp_err_t config_store_save_profiles(const config_profiles_t *in)
     return save_blob(NS_PROFILES, CONFIG_SCHEMA_PROFILES, in, sizeof *in);
 }
 
+esp_err_t config_store_load_time(config_time_t *out)
+{
+    if (!out) return ESP_ERR_INVALID_ARG;
+    esp_err_t err = load_blob(NS_TIME, CONFIG_SCHEMA_TIME, out, sizeof *out);
+    if (err != ESP_OK) {
+        config_defaults_time(out);
+        esp_err_t save_err = expected_default_err(err)
+            ? save_blob(NS_TIME, CONFIG_SCHEMA_TIME, out, sizeof *out)
+            : ESP_OK;
+        report_load_fallback("time", err, save_err, &s_reported_time_fallback);
+        return ESP_OK;
+    }
+    return ESP_OK;
+}
+
+esp_err_t config_store_save_time(const config_time_t *in)
+{
+    if (!in) return ESP_ERR_INVALID_ARG;
+    return save_blob(NS_TIME, CONFIG_SCHEMA_TIME, in, sizeof *in);
+}
+
+esp_err_t config_store_load_sun(config_sun_t *out)
+{
+    if (!out) return ESP_ERR_INVALID_ARG;
+    esp_err_t err = load_blob(NS_SUN, CONFIG_SCHEMA_SUN, out, sizeof *out);
+    if (err != ESP_OK) {
+        config_defaults_sun(out);
+        esp_err_t save_err = expected_default_err(err)
+            ? save_blob(NS_SUN, CONFIG_SCHEMA_SUN, out, sizeof *out)
+            : ESP_OK;
+        report_load_fallback("sun", err, save_err, &s_reported_sun_fallback);
+        return ESP_OK;
+    }
+    return ESP_OK;
+}
+
+esp_err_t config_store_save_sun(const config_sun_t *in)
+{
+    if (!in) return ESP_ERR_INVALID_ARG;
+    return save_blob(NS_SUN, CONFIG_SCHEMA_SUN, in, sizeof *in);
+}
+
+esp_err_t config_store_load_schedules(config_schedules_t *out)
+{
+    if (!out) return ESP_ERR_INVALID_ARG;
+    esp_err_t err = load_blob(NS_SCHEDULES, CONFIG_SCHEMA_SCHEDULES, out, sizeof *out);
+    if (err != ESP_OK) {
+        config_defaults_schedules(out);
+        esp_err_t save_err = expected_default_err(err)
+            ? save_blob(NS_SCHEDULES, CONFIG_SCHEMA_SCHEDULES, out, sizeof *out)
+            : ESP_OK;
+        report_load_fallback("schedules", err, save_err, &s_reported_schedules_fallback);
+        return ESP_OK;
+    }
+    return ESP_OK;
+}
+
+esp_err_t config_store_save_schedules(const config_schedules_t *in)
+{
+    if (!in) return ESP_ERR_INVALID_ARG;
+    return save_blob(NS_SCHEDULES, CONFIG_SCHEMA_SCHEDULES, in, sizeof *in);
+}
+
 esp_err_t config_store_factory_reset(void)
 {
     esp_err_t e1 = erase_namespace(NS_CONTROLLER);
@@ -250,9 +324,15 @@ esp_err_t config_store_factory_reset(void)
     esp_err_t e3 = erase_namespace(NS_WIFI);
     esp_err_t e4 = erase_namespace(NS_MQTT);
     esp_err_t e5 = erase_namespace(NS_PROFILES);
+    esp_err_t e6 = erase_namespace(NS_TIME);
+    esp_err_t e7 = erase_namespace(NS_SUN);
+    esp_err_t e8 = erase_namespace(NS_SCHEDULES);
     if (e1 != ESP_OK) return e1;
     if (e2 != ESP_OK) return e2;
     if (e3 != ESP_OK) return e3;
     if (e4 != ESP_OK) return e4;
-    return e5;
+    if (e5 != ESP_OK) return e5;
+    if (e6 != ESP_OK) return e6;
+    if (e7 != ESP_OK) return e7;
+    return e8;
 }

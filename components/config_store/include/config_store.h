@@ -7,8 +7,9 @@
 
 /* config_store
  * ============
- * Persistent configuration for controller / modbus / wifi / mqtt + user
- * color profiles (named 9-channel intensity mixes for LiveDemoScene).
+ * Persistent configuration for controller / modbus / wifi / mqtt / time /
+ * sun / schedules + user color profiles (named 9-channel intensity mixes
+ * for LiveDemoScene).
  * Each record lives in its own NVS namespace as a single blob:
  *   [uint32_t schema_version][packed struct bytes]
  *
@@ -28,8 +29,12 @@
 #define CONFIG_SCHEMA_WIFI        2
 #define CONFIG_SCHEMA_MQTT        2
 #define CONFIG_SCHEMA_PROFILES    2
+#define CONFIG_SCHEMA_TIME        1
+#define CONFIG_SCHEMA_SUN         1
+#define CONFIG_SCHEMA_SCHEDULES   1
 
 #define MAX_USER_PROFILES         8
+#define MAX_SCHEDULES             12
 #define CONFIG_PROFILE_NAME_LEN   17  /* includes NUL */
 #define CONFIG_PROFILE_DESC_LEN   129 /* includes NUL */
 
@@ -48,6 +53,12 @@
 #define CONFIG_MQTT_CLIENT_ID_LEN  33
 #define CONFIG_MQTT_TOPIC_LEN      33
 #define CONFIG_MQTT_HA_PREFIX_LEN  33
+#define CONFIG_TIME_SERVER_LEN     65
+#define CONFIG_TZ_LEN              65
+#define CONFIG_LOCATION_LABEL_LEN  33
+#define CONFIG_SCHEDULE_ID_LEN     17
+#define CONFIG_SCHEDULE_NAME_LEN   33
+#define CONFIG_SCHEDULE_TARGET_LEN 33
 
 typedef enum {
     MODBUS_PARITY_NONE = 0,
@@ -106,6 +117,19 @@ typedef struct {
 } config_mqtt_t;
 
 typedef struct {
+    bool     enabled;
+    char     server[CONFIG_TIME_SERVER_LEN];
+    char     timezone[CONFIG_TZ_LEN];  /* POSIX TZ string for setenv("TZ", ...). */
+} config_time_t;
+
+typedef struct {
+    bool     enabled;
+    char     location_label[CONFIG_LOCATION_LABEL_LEN];
+    int32_t  latitude_e7;   /* degrees * 10,000,000 */
+    int32_t  longitude_e7;  /* degrees * 10,000,000 */
+} config_sun_t;
+
+typedef struct {
     char     name[CONFIG_PROFILE_NAME_LEN];
     char     description[CONFIG_PROFILE_DESC_LEN];
     uint16_t intensities[9];  /* 0..1000 per channel, in canonical SupportedColorChannels order (see channel_model) */
@@ -116,12 +140,50 @@ typedef struct {
     user_profile_t profiles[MAX_USER_PROFILES];
 } config_profiles_t;
 
+typedef enum {
+    CONFIG_SCHEDULE_TARGET_LIGHT = 0,
+    CONFIG_SCHEDULE_TARGET_GROUP = 1,
+} config_schedule_target_t;
+
+typedef enum {
+    CONFIG_SCHEDULE_TRIGGER_FIXED   = 0,
+    CONFIG_SCHEDULE_TRIGGER_SUNRISE = 1,
+    CONFIG_SCHEDULE_TRIGGER_SUNSET  = 2,
+} config_schedule_trigger_t;
+
+typedef struct {
+    bool      enabled;
+    char      schedule_id[CONFIG_SCHEDULE_ID_LEN];
+    char      name[CONFIG_SCHEDULE_NAME_LEN];
+    uint8_t   target_type;  /* config_schedule_target_t */
+    char      target_id[CONFIG_SCHEDULE_TARGET_LEN];
+    char      profile_name[CONFIG_PROFILE_NAME_LEN];
+    uint8_t   intensity_percent;      /* 0..100 */
+    uint8_t   end_intensity_percent;  /* 0..100 */
+    uint8_t   start_trigger;          /* config_schedule_trigger_t */
+    uint8_t   end_trigger;            /* config_schedule_trigger_t */
+    uint16_t  start_minute;           /* 0..1439, only for fixed trigger */
+    uint16_t  end_minute;             /* 0..1439, only for fixed trigger */
+    int16_t   start_offset_min;       /* sunrise/sunset offset */
+    int16_t   end_offset_min;         /* sunrise/sunset offset */
+    uint16_t  ramp_up_min;
+    uint16_t  ramp_down_min;
+} config_schedule_t;
+
+typedef struct {
+    uint8_t           count;
+    config_schedule_t schedules[MAX_SCHEDULES];
+} config_schedules_t;
+
 /* ---- defaults factories (pure C, host-testable) ---- */
 void config_defaults_controller(config_controller_t *out);
 void config_defaults_modbus(config_modbus_t *out);
 void config_defaults_wifi(config_wifi_t *out);
 void config_defaults_mqtt(config_mqtt_t *out);
 void config_defaults_profiles(config_profiles_t *out);
+void config_defaults_time(config_time_t *out);
+void config_defaults_sun(config_sun_t *out);
+void config_defaults_schedules(config_schedules_t *out);
 
 /* ---- ESP-IDF NVS API (only available in the firmware build) ---- */
 #ifdef ESP_PLATFORM
@@ -143,6 +205,15 @@ esp_err_t config_store_save_mqtt(const config_mqtt_t *in);
 
 esp_err_t config_store_load_profiles(config_profiles_t *out);
 esp_err_t config_store_save_profiles(const config_profiles_t *in);
+
+esp_err_t config_store_load_time(config_time_t *out);
+esp_err_t config_store_save_time(const config_time_t *in);
+
+esp_err_t config_store_load_sun(config_sun_t *out);
+esp_err_t config_store_save_sun(const config_sun_t *in);
+
+esp_err_t config_store_load_schedules(config_schedules_t *out);
+esp_err_t config_store_save_schedules(const config_schedules_t *in);
 
 /* For tests / factory reset: erase every config namespace. */
 esp_err_t config_store_factory_reset(void);

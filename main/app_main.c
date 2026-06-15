@@ -11,6 +11,9 @@
 #include "modbus_interface.h"
 #include "mqtt_bridge.h"
 #include "ota_update.h"
+#include "schedule_engine.h"
+#include "sun_service.h"
+#include "time_service.h"
 #include "web_ui.h"
 #include "wifi_station.h"
 
@@ -118,6 +121,10 @@ void app_main(void)
 
     /* WiFi must come up before the HTTP server so the netif exists. */
     ESP_ERROR_CHECK(hydra_wifi_start());
+
+    ESP_ERROR_CHECK(time_service_init());
+    ESP_ERROR_CHECK(sun_service_init());
+    ESP_ERROR_CHECK(schedule_engine_init());
 
     ESP_ERROR_CHECK(web_ui_init());
 
