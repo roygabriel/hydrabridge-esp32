@@ -596,9 +596,14 @@ static int json_get_double_scaled_e7(const char *json, const char *key, int32_t 
     return 0;
 }
 
-static double e7_to_double(int32_t v)
+static void format_e7(int32_t v, char out[24])
 {
-    return (double)v / 10000000.0;
+    if (!out) return;
+    int64_t av = v < 0 ? -(int64_t)v : (int64_t)v;
+    snprintf(out, 24, "%s%lld.%07lld",
+             v < 0 ? "-" : "",
+             (long long)(av / 10000000LL),
+             (long long)(av % 10000000LL));
 }
 
 static bool safe_display_name(const char *s)
@@ -1307,12 +1312,16 @@ static esp_err_t get_sun_config(httpd_req_t *req)
     config_store_load_sun(&cfg);
     sun_service_status_t st;
     sun_service_get_status(&st);
+    char lat[24];
+    char lon[24];
+    format_e7(cfg.latitude_e7, lat);
+    format_e7(cfg.longitude_e7, lon);
     char buf[640];
     snprintf(buf, sizeof buf,
         "{\"enabled\":%s,"
         "\"location_label\":\"%s\","
-        "\"latitude\":%.7f,"
-        "\"longitude\":%.7f,"
+        "\"latitude\":%s,"
+        "\"longitude\":%s,"
         "\"valid\":%s,"
         "\"sunrise_local\":\"%s\","
         "\"sunset_local\":\"%s\","
@@ -1320,8 +1329,8 @@ static esp_err_t get_sun_config(httpd_req_t *req)
         "\"sunset_minute\":%d}",
         cfg.enabled ? "true" : "false",
         cfg.location_label,
-        e7_to_double(cfg.latitude_e7),
-        e7_to_double(cfg.longitude_e7),
+        lat,
+        lon,
         st.valid ? "true" : "false",
         st.sunrise_local,
         st.sunset_local,
@@ -1411,14 +1420,21 @@ static esp_err_t get_schedules(httpd_req_t *req)
     config_store_load_schedules(&cfg);
     schedule_engine_status_t st;
     schedule_engine_get_status(&st);
-    char buf[8192];
-    size_t off = 0;
-    off += snprintf(buf + off, sizeof buf - off,
+
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+
+    char chunk[512];
+    snprintf(chunk, sizeof chunk,
         "{\"running\":%s,\"next_action\":\"%s\",\"schedules\":[",
         st.running ? "true" : "false", st.next_action);
-    for (uint8_t i = 0; i < cfg.count && off < sizeof buf - 512; ++i) {
+    if (httpd_resp_send_chunk(req, chunk, HTTPD_RESP_USE_STRLEN) != ESP_OK) {
+        return ESP_FAIL;
+    }
+
+    for (uint8_t i = 0; i < cfg.count; ++i) {
         const config_schedule_t *s = &cfg.schedules[i];
-        off += snprintf(buf + off, sizeof buf - off,
+        snprintf(chunk, sizeof chunk,
             "%s{\"enabled\":%s,\"schedule_id\":\"%s\",\"name\":\"%s\","
             "\"target_type\":%u,\"target_id\":\"%s\",\"profile_name\":\"%s\","
             "\"intensity_percent\":%u,\"end_intensity_percent\":%u,"
@@ -1443,9 +1459,14 @@ static esp_err_t get_schedules(httpd_req_t *req)
             (int)s->end_offset_min,
             (unsigned)s->ramp_up_min,
             (unsigned)s->ramp_down_min);
+        if (httpd_resp_send_chunk(req, chunk, HTTPD_RESP_USE_STRLEN) != ESP_OK) {
+            return ESP_FAIL;
+        }
     }
-    snprintf(buf + off, sizeof buf - off, "]}");
-    return send_json(req, buf);
+    if (httpd_resp_send_chunk(req, "]}", HTTPD_RESP_USE_STRLEN) != ESP_OK) {
+        return ESP_FAIL;
+    }
+    return httpd_resp_send_chunk(req, NULL, 0);
 }
 
 static esp_err_t post_schedule(httpd_req_t *req)
