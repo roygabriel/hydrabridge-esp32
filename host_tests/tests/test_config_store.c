@@ -79,6 +79,32 @@ static void test_mqtt_defaults_match_spec(void)
     TEST_ASSERT_EQUAL_STRING("homeassistant", m.home_assistant_prefix);
 }
 
+static void test_time_defaults_match_spec(void)
+{
+    config_time_t t;
+    config_defaults_time(&t);
+    TEST_ASSERT_TRUE(t.enabled);
+    TEST_ASSERT_EQUAL_STRING("time.nist.gov", t.server);
+    TEST_ASSERT_EQUAL_STRING("UTC0", t.timezone);
+}
+
+static void test_sun_defaults_match_spec(void)
+{
+    config_sun_t s;
+    config_defaults_sun(&s);
+    TEST_ASSERT_FALSE(s.enabled);
+    TEST_ASSERT_EQUAL_STRING("My Reef", s.location_label);
+    TEST_ASSERT_EQUAL_INT32(0, s.latitude_e7);
+    TEST_ASSERT_EQUAL_INT32(0, s.longitude_e7);
+}
+
+static void test_schedule_defaults_match_spec(void)
+{
+    config_schedules_t s;
+    config_defaults_schedules(&s);
+    TEST_ASSERT_EQUAL_UINT8(0, s.count);
+}
+
 /* ---- defaults overwrite prior garbage (regression test) ---- */
 
 static void test_defaults_overwrite_garbage(void)
@@ -98,6 +124,9 @@ static void test_defaults_null_safe(void)
     config_defaults_modbus(NULL);
     config_defaults_wifi(NULL);
     config_defaults_mqtt(NULL);
+    config_defaults_time(NULL);
+    config_defaults_sun(NULL);
+    config_defaults_schedules(NULL);
     TEST_PASS();
 }
 
@@ -119,6 +148,9 @@ void register_config_store_tests(void)
     RUN_TEST(test_modbus_defaults_match_spec);
     RUN_TEST(test_wifi_defaults_match_spec);
     RUN_TEST(test_mqtt_defaults_match_spec);
+    RUN_TEST(test_time_defaults_match_spec);
+    RUN_TEST(test_sun_defaults_match_spec);
+    RUN_TEST(test_schedule_defaults_match_spec);
     RUN_TEST(test_defaults_overwrite_garbage);
     RUN_TEST(test_defaults_null_safe);
     RUN_TEST(test_size_budgets);

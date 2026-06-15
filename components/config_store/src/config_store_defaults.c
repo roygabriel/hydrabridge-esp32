@@ -75,3 +75,28 @@ void config_defaults_profiles(config_profiles_t *out)
     /* No built-in user profiles by default; user saves via UI or API.
      * count=0 means empty list; falls back cleanly. */
 }
+
+void config_defaults_time(config_time_t *out)
+{
+    if (!out) return;
+    memset(out, 0, sizeof *out);
+    out->enabled = true;
+    strncpy(out->server,   "time.nist.gov", sizeof out->server - 1);
+    strncpy(out->timezone, "UTC0",          sizeof out->timezone - 1);
+}
+
+void config_defaults_sun(config_sun_t *out)
+{
+    if (!out) return;
+    memset(out, 0, sizeof *out);
+    out->enabled = false;
+    strncpy(out->location_label, "My Reef", sizeof out->location_label - 1);
+    out->latitude_e7 = 0;
+    out->longitude_e7 = 0;
+}
+
+void config_defaults_schedules(config_schedules_t *out)
+{
+    if (!out) return;
+    memset(out, 0, sizeof *out);
+}

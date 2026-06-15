@@ -42,6 +42,8 @@ set(MODULE_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/../components/command_engine/src/command_engine.c
     ${CMAKE_CURRENT_SOURCE_DIR}/../components/modbus_interface/src/modbus_interface.c
     ${CMAKE_CURRENT_SOURCE_DIR}/../components/mqtt_bridge/src/mqtt_bridge.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/../components/sun_service/src/sun_service.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/../components/schedule_engine/src/schedule_engine.c
     $ENV{IDF_PATH}/components/json/cJSON/cJSON.c
 )
 
@@ -68,8 +70,12 @@ target_include_directories(host_tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../components/command_engine/include
     ${CMAKE_CURRENT_SOURCE_DIR}/../components/modbus_interface/include
     ${CMAKE_CURRENT_SOURCE_DIR}/../components/mqtt_bridge/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/../components/sun_service/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/../components/schedule_engine/include
     $ENV{IDF_PATH}/components/json/cJSON
 )
+
+target_link_libraries(host_tests PRIVATE m)
 
 # Unity config: skip the unity_config.h include (ESP-IDF supplies one only
 # inside its build system), keep colored stdout.

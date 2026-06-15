@@ -19,6 +19,8 @@ HydraBridge ESP32 is an open-source gateway that connects AquaIllumination Hydra
 
 Local control for AquaIllumination Hydra® lights over RS485 and MQTT.
 
+![HydraBridge ESP32 web UI demo](docs/assets/hydrabridge-ui-demo.gif)
+
 Features include:
 
 - Automatic Hydra® light discovery
@@ -155,6 +157,7 @@ The controller picks up the `command_seq` increment, dispatches via `command_eng
 
 - [BLE protocol reference](docs/ble-protocol-reference.md) — clean technical writeup
 - [RS485 / Modbus protocol](docs/rs485-modbus-protocol.md) — register map and command examples
+- [Time, sun events, and schedules](docs/time-sun-schedules.md) — SNTP, local sunrise/sunset, and lighting schedule reference
 - [Quickstart](docs/quickstart.md) — flashing and first-boot setup
 
 ## License
