@@ -161,6 +161,12 @@ The controller picks up the `command_seq` increment, dispatches via `command_eng
 
 HydraBridge ESP32 is released under the [MIT License](LICENSE).
 
+## No Warranty And User Responsibility
+
+HydraBridge ESP32 is provided "as is", without warranty of any kind, express or implied, including without limitation any warranties of merchantability, fitness for a particular purpose, non-infringement, electrical safety, regulatory compliance, or suitability for aquarium, livestock, industrial, automation, or life-support use. You use, modify, flash, wire, and operate this software and any connected hardware entirely at your own risk.
+
+The maintainers and contributors are not responsible or liable for any claim, damage, loss, injury, equipment failure, livestock loss, data loss, business interruption, regulatory violation, unsafe wiring, unauthorized access, misuse, or other liability arising from or related to this project, whether in an action of contract, tort, negligence, product liability, or otherwise. Users are solely responsible for verifying safe installation, lawful use, electrical isolation, fail-safe behavior, backups, monitoring, and compliance with all applicable laws, regulations, licenses, and third-party rights.
+
 ## Trademark Notice
 
 Hydra® and Mobius® are registered trademarks of ECOTECH, LLC. EcoTech Marine and AquaIllumination are brands associated with EcoTech, LLC and/or Aperture, LLC. HydraBridge ESP32 is an independent interoperability project and is not sanctioned, authorized, affiliated with, endorsed by, sponsored by, maintained by, or supported by EcoTech, LLC, EcoTech Marine, AquaIllumination, Aperture, LLC, or any of their respective parents, subsidiaries, affiliates, successors, or assigns. Use of third-party names and marks is solely nominative, to identify compatible hardware and protocols, and does not imply any commercial relationship, approval, warranty, or fitness representation by those trademark owners.
