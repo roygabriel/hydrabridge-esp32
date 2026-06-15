@@ -134,6 +134,7 @@ static const char STATUS_HTML[] =
 "<!doctype html><html><head><meta charset=utf-8>"
 "<title>HydraBridge ESP32</title>"
 "<meta name=viewport content=\"width=device-width,initial-scale=1\">"
+"<link rel=icon href=/favicon.ico>"
 "<style>"
 "*{box-sizing:border-box}"
 ":root{color-scheme:light;--bg:#f5f7fb;--panel:#fff;--ink:#172033;--muted:#667085;--line:#d9e0ea;--blue:#1f6feb;--blue2:#dbeafe;--green:#12805c;--red:#c0352b;--amber:#b7791f;--shadow:0 14px 40px rgba(24,36,56,.09)}"
@@ -283,6 +284,26 @@ static esp_err_t get_root(httpd_req_t *req)
 {
     httpd_resp_set_type(req, "text/html; charset=utf-8");
     return httpd_resp_send(req, STATUS_HTML, sizeof STATUS_HTML - 1);
+}
+
+static esp_err_t head_root(httpd_req_t *req)
+{
+    httpd_resp_set_type(req, "text/html; charset=utf-8");
+    return httpd_resp_send(req, NULL, 0);
+}
+
+static esp_err_t get_favicon(httpd_req_t *req)
+{
+    static const char FAVICON_SVG[] =
+        "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 64 64\">"
+        "<rect width=\"64\" height=\"64\" rx=\"12\" fill=\"#172033\"/>"
+        "<path d=\"M14 42c8-18 28-18 36 0\" fill=\"none\" stroke=\"#1f6feb\" stroke-width=\"7\" stroke-linecap=\"round\"/>"
+        "<path d=\"M18 32c7-12 21-12 28 0\" fill=\"none\" stroke=\"#14b8a6\" stroke-width=\"6\" stroke-linecap=\"round\"/>"
+        "<circle cx=\"32\" cy=\"24\" r=\"7\" fill=\"#dbeafe\"/>"
+        "</svg>";
+    httpd_resp_set_type(req, "image/svg+xml");
+    httpd_resp_set_hdr(req, "Cache-Control", "public, max-age=86400");
+    return httpd_resp_send(req, FAVICON_SVG, sizeof FAVICON_SVG - 1);
 }
 
 static esp_err_t get_status(httpd_req_t *req)
@@ -1976,7 +1997,7 @@ esp_err_t web_ui_init(void)
 {
     httpd_config_t cfg = HTTPD_DEFAULT_CONFIG();
     cfg.uri_match_fn = httpd_uri_match_wildcard;
-    cfg.max_uri_handlers = 40;
+    cfg.max_uri_handlers = 42;
     cfg.lru_purge_enable = true;
     cfg.stack_size = 8192;
 
@@ -1987,6 +2008,8 @@ esp_err_t web_ui_init(void)
     }
 
     static const httpd_uri_t r_root          = { .uri = "/",                     .method = HTTP_GET,  .handler = get_root };
+    static const httpd_uri_t r_root_head     = { .uri = "/",                     .method = HTTP_HEAD, .handler = head_root };
+    static const httpd_uri_t r_favicon       = { .uri = "/favicon.ico",          .method = HTTP_GET,  .handler = get_favicon };
     static const httpd_uri_t r_status        = { .uri = "/api/status",           .method = HTTP_GET,  .handler = get_status };
     static const httpd_uri_t r_scan          = { .uri = "/api/scan",             .method = HTTP_POST, .handler = post_scan };
     static const httpd_uri_t r_scan_results  = { .uri = "/api/scan/results",     .method = HTTP_GET,  .handler = get_scan_results };
@@ -2018,6 +2041,8 @@ esp_err_t web_ui_init(void)
     static const httpd_uri_t r_profile_del   = { .uri = "/api/profiles/*",       .method = HTTP_DELETE, .handler = delete_profile };
 
     httpd_register_uri_handler(s_server, &r_root);
+    httpd_register_uri_handler(s_server, &r_root_head);
+    httpd_register_uri_handler(s_server, &r_favicon);
     httpd_register_uri_handler(s_server, &r_status);
     httpd_register_uri_handler(s_server, &r_scan);
     httpd_register_uri_handler(s_server, &r_scan_results);
