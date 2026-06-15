@@ -2,15 +2,24 @@ name: Firmware
 
 on:
   pull_request:
+    paths-ignore:
+      - "README.md"
+      - "docs/**"
   workflow_dispatch:
   push:
     branches:
       - main
     tags:
       - "v*"
+    paths-ignore:
+      - "README.md"
+      - "docs/**"
 
 permissions:
   contents: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   build:
@@ -20,7 +29,7 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           submodules: recursive
 
