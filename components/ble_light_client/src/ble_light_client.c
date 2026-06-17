@@ -185,7 +185,6 @@ static void handle_rx_notify(const uint8_t *data, size_t len, bool is_final)
             pump_registry_set_status(s_conn.in_flight.light_id,
                                      (pump_mode_t)s_conn.in_flight.pump_mode,
                                      s_conn.in_flight.pump_speed_percent);
-            pump_registry_save();
         } else {
             light_registry_set_last_state(s_conn.in_flight.light_id, &s_conn.in_flight.state);
         }

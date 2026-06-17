@@ -7,6 +7,7 @@
 
 #include "channel_model.h"
 #include "light_registry.h"
+#include "pump_registry.h"
 
 /* command_queue
  * =============
@@ -20,7 +21,8 @@
 
 #define CMD_QUEUE_DEPTH       8
 #define CMD_ID_LEN            33
-#define CMD_QUEUE_MAX_TARGETS (LIGHT_REGISTRY_CAPACITY + 4)
+#define CMD_QUEUE_PUMP_TARGETS PUMP_REGISTRY_CAPACITY
+#define CMD_QUEUE_MAX_TARGETS (LIGHT_REGISTRY_CAPACITY + CMD_QUEUE_PUMP_TARGETS)
 
 typedef enum {
     CMD_SOURCE_SYSTEM = 0,

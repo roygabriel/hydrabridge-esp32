@@ -728,7 +728,8 @@ static bool safe_display_name(const char *s)
 {
     if (!s || !s[0]) return false;
     for (const char *p = s; *p; ++p) {
-        if (*p == '"' || *p == '\\' || *p == '<' || *p == '>') return false;
+        unsigned char c = (unsigned char)*p;
+        if (c < 0x20 || *p == '"' || *p == '\\' || *p == '<' || *p == '>') return false;
     }
     return true;
 }
@@ -925,6 +926,16 @@ static esp_err_t post_pumps(httpd_req_t *req)
     }
     if (hydra_ble_addr_parse(addr_str, p.ble_addr) != 0) {
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "bad ble_addr");
+        return ESP_FAIL;
+    }
+    if (!safe_profile_text(p.pump_id, false) ||
+        !safe_display_name(p.display_name) ||
+        !safe_profile_text(p.serial, false)) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "bad pump fields");
+        return ESP_FAIL;
+    }
+    if (light_registry_get(p.pump_id)) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "pump_id collides with light_id");
         return ESP_FAIL;
     }
 
