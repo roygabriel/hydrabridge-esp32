@@ -37,13 +37,16 @@ set(MODULE_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/../components/hydra64hd_protocol/src/hydra64hd_protocol.c
     ${CMAKE_CURRENT_SOURCE_DIR}/../components/preset_engine/src/preset_engine.c
     ${CMAKE_CURRENT_SOURCE_DIR}/../components/light_registry/src/light_registry.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/../components/pump_registry/src/pump_registry.c
     ${CMAKE_CURRENT_SOURCE_DIR}/../components/ble_scanner/src/ble_scanner.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/../components/ai_pump_protocol/src/ai_pump_protocol.c
     ${CMAKE_CURRENT_SOURCE_DIR}/../components/command_queue/src/command_queue.c
     ${CMAKE_CURRENT_SOURCE_DIR}/../components/command_engine/src/command_engine.c
     ${CMAKE_CURRENT_SOURCE_DIR}/../components/modbus_interface/src/modbus_interface.c
     ${CMAKE_CURRENT_SOURCE_DIR}/../components/mqtt_bridge/src/mqtt_bridge.c
     ${CMAKE_CURRENT_SOURCE_DIR}/../components/sun_service/src/sun_service.c
     ${CMAKE_CURRENT_SOURCE_DIR}/../components/schedule_engine/src/schedule_engine.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/../components/pump_schedule_engine/src/pump_schedule_engine.c
     $ENV{IDF_PATH}/components/json/cJSON/cJSON.c
 )
 
@@ -65,13 +68,16 @@ target_include_directories(host_tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../components/hydra64hd_protocol/include
     ${CMAKE_CURRENT_SOURCE_DIR}/../components/preset_engine/include
     ${CMAKE_CURRENT_SOURCE_DIR}/../components/light_registry/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/../components/pump_registry/include
     ${CMAKE_CURRENT_SOURCE_DIR}/../components/ble_scanner/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/../components/ai_pump_protocol/include
     ${CMAKE_CURRENT_SOURCE_DIR}/../components/command_queue/include
     ${CMAKE_CURRENT_SOURCE_DIR}/../components/command_engine/include
     ${CMAKE_CURRENT_SOURCE_DIR}/../components/modbus_interface/include
     ${CMAKE_CURRENT_SOURCE_DIR}/../components/mqtt_bridge/include
     ${CMAKE_CURRENT_SOURCE_DIR}/../components/sun_service/include
     ${CMAKE_CURRENT_SOURCE_DIR}/../components/schedule_engine/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/../components/pump_schedule_engine/include
     $ENV{IDF_PATH}/components/json/cJSON
 )
 

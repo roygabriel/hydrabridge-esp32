@@ -20,6 +20,7 @@
 
 #define CMD_QUEUE_DEPTH       8
 #define CMD_ID_LEN            33
+#define CMD_QUEUE_MAX_TARGETS (LIGHT_REGISTRY_CAPACITY + 4)
 
 typedef enum {
     CMD_SOURCE_SYSTEM = 0,
@@ -33,12 +34,19 @@ typedef enum {
     CMD_TYPE_SET_CHANNELS = 1,  /* coalescable */
     CMD_TYPE_RAMP         = 2,  /* not coalescable */
     CMD_TYPE_IDENTIFY     = 3,  /* not coalescable */
+    CMD_TYPE_PUMP_SET     = 4,  /* coalescable per pump */
 } cmd_type_t;
+
+typedef enum {
+    CMD_DEVICE_LIGHT = 0,
+    CMD_DEVICE_PUMP  = 1,
+} cmd_device_type_t;
 
 typedef struct {
     char            command_id[CMD_ID_LEN];
     cmd_source_t    source;
     cmd_type_t      type;
+    cmd_device_type_t device_type;
     char            light_id[LIGHT_ID_LEN];
     uint64_t        enqueue_ms;
     uint32_t        timeout_ms;
@@ -49,6 +57,18 @@ typedef struct {
     uint16_t        ramp_to;
     uint32_t        ramp_duration_ms;
     uint16_t        ramp_steps;
+    uint8_t         pump_mode;
+    uint8_t         pump_speed_percent;
+    uint8_t         pump_min_speed_percent;
+    uint8_t         pump_variance_percent;
+    uint32_t        pump_on_time_ms;
+    uint32_t        pump_off_time_ms;
+    uint32_t        pump_pulse_time_ms;
+    uint16_t        pump_start_time_ms;
+    uint16_t        pump_end_time_ms;
+    uint16_t        pump_phase_shift_deg;
+    bool            pump_has_master;
+    uint8_t         pump_master[8];
 } pending_command_t;
 
 void cmd_queue_reset(void);

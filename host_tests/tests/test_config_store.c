@@ -103,6 +103,10 @@ static void test_schedule_defaults_match_spec(void)
     config_schedules_t s;
     config_defaults_schedules(&s);
     TEST_ASSERT_EQUAL_UINT8(0, s.count);
+
+    config_pump_schedules_t p;
+    config_defaults_pump_schedules(&p);
+    TEST_ASSERT_EQUAL_UINT8(0, p.count);
 }
 
 /* ---- defaults overwrite prior garbage (regression test) ---- */
@@ -127,6 +131,7 @@ static void test_defaults_null_safe(void)
     config_defaults_time(NULL);
     config_defaults_sun(NULL);
     config_defaults_schedules(NULL);
+    config_defaults_pump_schedules(NULL);
     TEST_PASS();
 }
 

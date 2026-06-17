@@ -10,6 +10,7 @@ idf_component_register(
         fsci_codec
         channel_model
         hydra64hd_protocol
+        ai_pump_protocol
         ble_light_client
         modbus_interface
         mqtt_bridge
@@ -20,6 +21,7 @@ idf_component_register(
         ota_update
         preset_engine
         light_registry
+        pump_registry
         command_queue
         ble_scanner
         ha_discovery
@@ -28,4 +30,5 @@ idf_component_register(
         time_service
         sun_service
         schedule_engine
+        pump_schedule_engine
 )

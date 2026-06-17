@@ -32,9 +32,11 @@
 #define CONFIG_SCHEMA_TIME        1
 #define CONFIG_SCHEMA_SUN         1
 #define CONFIG_SCHEMA_SCHEDULES   1
+#define CONFIG_SCHEMA_PUMP_SCHEDULES 2
 
 #define MAX_USER_PROFILES         8
 #define MAX_SCHEDULES             12
+#define MAX_PUMP_SCHEDULES        12
 #define CONFIG_PROFILE_NAME_LEN   17  /* includes NUL */
 #define CONFIG_PROFILE_DESC_LEN   129 /* includes NUL */
 
@@ -175,6 +177,54 @@ typedef struct {
     config_schedule_t schedules[MAX_SCHEDULES];
 } config_schedules_t;
 
+typedef enum {
+    CONFIG_PUMP_MODE_CONSTANT = 1,
+    CONFIG_PUMP_MODE_LAGOON = 2,
+    CONFIG_PUMP_MODE_REEF_CREST = 3,
+    CONFIG_PUMP_MODE_NUTRIENT_TRANSPORT = 4,
+    CONFIG_PUMP_MODE_TIDAL_SWELL = 5,
+    CONFIG_PUMP_MODE_SHORT_PULSE = 6,
+    CONFIG_PUMP_MODE_GYRE = 7,
+    CONFIG_PUMP_MODE_TRANSITION = 8,
+    CONFIG_PUMP_MODE_EXPANDING_PULSE = 9,
+    CONFIG_PUMP_MODE_SYNC = 10,
+    CONFIG_PUMP_MODE_ECOSMART_BACK = 12,
+    CONFIG_PUMP_MODE_FEED = 13,
+    CONFIG_PUMP_MODE_BATTERY_BACKUP = 14,
+    CONFIG_PUMP_MODE_RANDOM = 15,
+    CONFIG_PUMP_MODE_PULSE = 16,
+} config_pump_mode_t;
+
+typedef struct {
+    bool      enabled;
+    char      schedule_id[CONFIG_SCHEDULE_ID_LEN];
+    char      name[CONFIG_SCHEDULE_NAME_LEN];
+    char      target_id[CONFIG_SCHEDULE_TARGET_LEN];
+    uint8_t   active_mode;           /* config_pump_mode_t */
+    uint8_t   active_speed_percent;  /* 0..100 */
+    uint8_t   active_min_speed_percent;
+    uint8_t   active_variance_percent;
+    uint16_t  active_on_time_ms;
+    uint16_t  active_off_time_ms;
+    uint8_t   end_mode;              /* config_pump_mode_t */
+    uint8_t   end_speed_percent;     /* 0..100 */
+    uint8_t   end_min_speed_percent;
+    uint8_t   end_variance_percent;
+    uint16_t  end_on_time_ms;
+    uint16_t  end_off_time_ms;
+    uint8_t   start_trigger;         /* config_schedule_trigger_t */
+    uint8_t   end_trigger;           /* config_schedule_trigger_t */
+    uint16_t  start_minute;          /* 0..1439, only for fixed trigger */
+    uint16_t  end_minute;            /* 0..1439, only for fixed trigger */
+    int16_t   start_offset_min;      /* sunrise/sunset offset */
+    int16_t   end_offset_min;        /* sunrise/sunset offset */
+} config_pump_schedule_t;
+
+typedef struct {
+    uint8_t                count;
+    config_pump_schedule_t schedules[MAX_PUMP_SCHEDULES];
+} config_pump_schedules_t;
+
 /* ---- defaults factories (pure C, host-testable) ---- */
 void config_defaults_controller(config_controller_t *out);
 void config_defaults_modbus(config_modbus_t *out);
@@ -184,6 +234,7 @@ void config_defaults_profiles(config_profiles_t *out);
 void config_defaults_time(config_time_t *out);
 void config_defaults_sun(config_sun_t *out);
 void config_defaults_schedules(config_schedules_t *out);
+void config_defaults_pump_schedules(config_pump_schedules_t *out);
 
 /* ---- ESP-IDF NVS API (only available in the firmware build) ---- */
 #ifdef ESP_PLATFORM
@@ -214,6 +265,9 @@ esp_err_t config_store_save_sun(const config_sun_t *in);
 
 esp_err_t config_store_load_schedules(config_schedules_t *out);
 esp_err_t config_store_save_schedules(const config_schedules_t *in);
+
+esp_err_t config_store_load_pump_schedules(config_pump_schedules_t *out);
+esp_err_t config_store_save_pump_schedules(const config_pump_schedules_t *in);
 
 /* For tests / factory reset: erase every config namespace. */
 esp_err_t config_store_factory_reset(void);

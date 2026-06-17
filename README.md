@@ -15,15 +15,16 @@ Under U.S. law, this project is intended to rely on the interoperability reverse
 
 This notice is provided for project context only and is not legal advice. Laws vary by jurisdiction, and downstream users are responsible for ensuring their own use complies with applicable law, license terms, and device ownership rights.
 
-HydraBridge ESP32 is an open-source gateway that connects AquaIllumination Hydra® lights to industrial and home automation systems.
+HydraBridge ESP32 is an open-source gateway that connects AquaIllumination Hydra® lights and experimental AI pump support to industrial and home automation systems.
 
-Local control for AquaIllumination Hydra® lights over RS485 and MQTT.
+Local control for AquaIllumination Hydra® lights, with experimental local BLE support for AI pumps, over WiFi, MQTT, and RS485 / Modbus.
 
 ![HydraBridge ESP32 web UI demo](docs/assets/hydrabridge-ui-demo.gif)
 
 Features include:
 
 - Automatic Hydra® light discovery
+- Experimental AI pump discovery, manual control, and scheduling
 - Local BLE communication
 - Browser-based setup and control UI
 - MQTT integration with optional Home Assistant auto-discovery
@@ -36,7 +37,7 @@ Features include:
 - Multi-light group support
 - Fully local operation with no cloud dependency
 
-This ESP32-S3 controller talks to **AquaIllumination Hydra®** lights directly over BLE using the reverse-engineered myAI / Mobius® protocol, with MQTT integration and a Modbus RTU slave register map for PLC integration.
+This ESP32-S3 controller talks to **AquaIllumination Hydra®** lights directly over BLE using the reverse-engineered myAI / Mobius® protocol, with experimental local BLE control for compatible AI pumps, MQTT integration, and a Modbus RTU slave register map for PLC integration.
 
 **Target hardware**: This project is developed and release-tested for the [Waveshare ESP32-S3-RS485-CAN](https://www.waveshare.com/wiki/ESP32-S3-RS485-CAN#Onboard_Resources). That board provides the expected ESP32-S3 MCU, 2.4 GHz WiFi/BLE, 16MB flash, USB-C flashing/debug, wide-range screw-terminal power input, and onboard isolated RS485 hardware.
 
@@ -53,7 +54,8 @@ Other ESP32-S3 boards can run HydraBridge ESP32, but may need changes before fla
 | Light registry + command queue | ✅ 4 lights, 4 groups, renaming, auto-reconnect metadata, per-light FIFO with coalescing, NVS persistence |
 | Command engine | ✅ Unified `ce_request_t` → validate → expand → enqueue from any source |
 | BLE discovery and light control | ✅ Scans, registers, reconnects, pairs, and writes commands to Hydra® lights |
-| Web UI | ✅ Local browser UI for discovery, lights, groups, profiles, schedules, OTA, MQTT, RS485, WiFi, time, and sun settings |
+| AI pump support | 🧪 Experimental Orbit/Nero/Axis-class discovery, registry, manual constant/feed commands, and local pump schedules |
+| Web UI | ✅ Local browser UI for discovery, lights, pumps, groups, profiles, schedules, OTA, MQTT, RS485, WiFi, time, and sun settings |
 | Lighting schedules | ✅ NVS-backed schedules targeting lights or groups, with fixed-time, sunrise, sunset, intensity, profile, and ramp controls |
 | Time and sun events | ✅ Optional SNTP sync, POSIX timezone setting, and local sunrise/sunset calculation from configured coordinates |
 | Modbus RTU slave | ✅ Optional ESP-Modbus RTU slave; disabled by default, configurable from the web UI |
@@ -64,7 +66,22 @@ Other ESP32-S3 boards can run HydraBridge ESP32, but may need changes before fla
 | WiFi setup portal | ✅ First-boot setup hotspot at `HydraBridge-Setup` / `http://192.168.1.10/`, configurable from Settings |
 | Release workflow | ✅ GitHub Actions builds ESP32-S3 firmware and publishes release assets on version tags |
 
-Today: the controller can be flashed from a release asset, joined to WiFi through the setup portal, discover and register Hydra® lights, control them locally over BLE, expose automation through MQTT and Modbus, and run local lighting schedules without cloud services.
+Today: the controller can be flashed from a release asset, joined to WiFi through the setup portal, discover and register Hydra® lights, control them locally over BLE, expose automation through MQTT and Modbus, and run local lighting schedules without cloud services. Experimental AI pump support is available in the web UI for local testing with Orbit-class devices.
+
+## Experimental AI pump support
+
+AI pump support currently targets Orbit-class devices using the Mobius-style pump scene command path. The web UI adds dedicated `Pumps` and `Pump Schedules` tabs for local testing.
+
+Current pump support includes:
+
+- Registering likely AI pump advertisements from BLE scan results.
+- Renaming and removing registered pumps.
+- Manual `Constant` and `Feed` commands with `0..100%` speed.
+- Up to 4 registered pumps, persisted in NVS.
+- Up to 12 pump schedules, persisted separately from lighting schedules.
+- Fixed-time, sunrise, and sunset schedule triggers using the same time/sun settings as lighting schedules.
+
+Pump support is still marked experimental because it needs more real-device validation across Orbit 2 / Orbit 4 hardware and firmware versions. Test first with conservative speeds and direct observation.
 
 ## Planned work
 
@@ -74,7 +91,6 @@ The current public backlog is tracked in GitHub issues:
 |---|---|
 | Static IP and configurable hostname settings | [#5](https://github.com/roygabriel/hydrabridge-esp32/issues/5) |
 | Optional username/password authentication | [#6](https://github.com/roygabriel/hydrabridge-esp32/issues/6) |
-| AI pump support | [#7](https://github.com/roygabriel/hydrabridge-esp32/issues/7) |
 | Comprehensive public API documentation | [#8](https://github.com/roygabriel/hydrabridge-esp32/issues/8) |
 
 ## Repo layout
@@ -84,12 +100,14 @@ main/                        ESP-IDF app entrypoint + idf_component.yml
 components/
   fsci_codec/                CRC + frame builder + parser + reassembly
   hydra64hd_protocol/        SupportedColorChannels read + LiveDemoScene write payload builders
+  ai_pump_protocol/          Experimental AI pump LiveDemoSceneNero payload builder
   channel_model/             Canonical 9-channel set, name lookup, validation
   preset_engine/             Command presets
   light_registry/            Registered lights + named groups (NVS-backed)
+  pump_registry/             Registered AI pumps (NVS-backed)
   ble_scanner/               Hydra advertisement parsing
-  ble_light_client/          NimBLE central scan/connect/GATT command worker
-  command_queue/             Per-light bounded FIFO with coalescing
+  ble_light_client/          NimBLE central scan/connect/GATT command worker for lights and pumps
+  command_queue/             Per-target bounded FIFO with coalescing
   command_engine/            ce_request_t → ce_result_t pipeline (Modbus / MQTT / web all converge here)
   modbus_interface/          Holding-register store + ESP-Modbus driver + RS485 UART wiring
   mqtt_bridge/               Optional MQTT client + JSON command-payload parser
@@ -98,6 +116,7 @@ components/
   event_log/                 Bounded ring + password redaction
   ota_update/                Web-upload OTA + rollback cancel
   schedule_engine/           Local lighting schedule evaluation and command dispatch
+  pump_schedule_engine/      Local pump schedule evaluation and command dispatch
   sun_service/               Local sunrise/sunset calculation
   time_service/              SNTP and timezone handling
   web_ui/                    Embedded HTTP API and browser UI
@@ -107,6 +126,7 @@ docs/
   rs485-modbus-protocol.md             RS485 / Modbus command reference
   quickstart.md                        Flashing and first-boot setup guide
   time-sun-schedules.md                SNTP, local sunrise/sunset, and lighting schedules
+  ai-pump-protocol-notes.md            Experimental AI pump support notes
 host_tests/                  Unity-based host tests for pure-C modules
 ```
 
@@ -145,7 +165,7 @@ cmake --build host_tests/build
 ./host_tests/build/host_tests
 ```
 
-Currently **179 tests** across 17 test files. Coverage includes captured CRCs, captured TX/RX frames, presets, Modbus dispatch paths, MQTT payloads, light registry/group behavior, config defaults, event-log redaction, sun calculations, and schedule timing logic.
+Currently **190 tests** across 20 test files. Coverage includes captured CRCs, captured TX/RX frames, presets, Modbus dispatch paths, MQTT payloads, light and pump registry behavior, config defaults, event-log redaction, sun calculations, pump payload construction, and schedule timing logic.
 
 ## RS485 / Modbus quick start
 
@@ -181,6 +201,7 @@ The controller picks up the `command_seq` increment, dispatches via `command_eng
 - [BLE protocol reference](docs/ble-protocol-reference.md) — clean technical writeup
 - [RS485 / Modbus protocol](docs/rs485-modbus-protocol.md) — register map and command examples
 - [Time, sun events, and schedules](docs/time-sun-schedules.md) — SNTP, local sunrise/sunset, and lighting schedule reference
+- [AI pump protocol notes](docs/ai-pump-protocol-notes.md) — experimental AI pump command and schedule reference
 - [Quickstart](docs/quickstart.md) — flashing and first-boot setup
 
 ## License

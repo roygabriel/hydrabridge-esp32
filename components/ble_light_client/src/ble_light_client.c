@@ -25,7 +25,9 @@
 #include "event_log.h"
 #include "fsci_codec.h"
 #include "hydra64hd_protocol.h"
+#include "ai_pump_protocol.h"
 #include "light_registry.h"
+#include "pump_registry.h"
 #include "wifi_station.h"
 
 static const char *TAG = "ble_light_client";
@@ -63,6 +65,7 @@ typedef struct {
     uint16_t          mtu;
     uint16_t          pending_msg_id;
     uint64_t          last_activity_ms;
+    cmd_device_type_t device_type;
     fsci_reassembly_t rx;
     bool              confirm_received;
     pending_command_t in_flight;
@@ -177,7 +180,16 @@ static void handle_rx_notify(const uint8_t *data, size_t len, bool is_final)
     if (f.msg_id   != s_conn.pending_msg_id) return;
     bool ok = (f.payload_len > 0 && f.payload[0] == 0);
     emit_result(&s_conn.in_flight, ok, ok ? "confirmed" : "non-zero status");
-    if (ok) light_registry_set_last_state(s_conn.in_flight.light_id, &s_conn.in_flight.state);
+    if (ok) {
+        if (s_conn.in_flight.device_type == CMD_DEVICE_PUMP) {
+            pump_registry_set_status(s_conn.in_flight.light_id,
+                                     (pump_mode_t)s_conn.in_flight.pump_mode,
+                                     s_conn.in_flight.pump_speed_percent);
+            pump_registry_save();
+        } else {
+            light_registry_set_last_state(s_conn.in_flight.light_id, &s_conn.in_flight.state);
+        }
+    }
     s_conn.confirm_received = true;
     set_state(BLC_STATE_COOLDOWN);
 }
@@ -358,10 +370,32 @@ static int send_frame(const uint8_t *frame, size_t frame_len)
 
 static void issue_write(const pending_command_t *cmd)
 {
-    uint8_t payload[HYDRA64_SET_LDS_PAYLOAD_BYTES];
-    size_t plen = hydra64_build_live_demo_scene_write(&cmd->state,
-                                                      cmd->scene_timeout_sec,
-                                                      payload, sizeof payload);
+    uint8_t payload[HYDRA64_SET_LDS_PAYLOAD_BYTES > AI_PUMP_SET_LDS_PAYLOAD_BYTES
+        ? HYDRA64_SET_LDS_PAYLOAD_BYTES : AI_PUMP_SET_LDS_PAYLOAD_BYTES];
+    size_t plen = 0;
+    if (cmd->device_type == CMD_DEVICE_PUMP) {
+        ai_pump_command_t pump_cmd = {
+            .mode = (pump_mode_t)cmd->pump_mode,
+            .speed_percent = cmd->pump_speed_percent,
+            .min_speed_percent = cmd->pump_min_speed_percent,
+            .variance_percent = cmd->pump_variance_percent,
+            .on_time_ms = cmd->pump_on_time_ms,
+            .off_time_ms = cmd->pump_off_time_ms,
+            .pulse_time_ms = cmd->pump_pulse_time_ms,
+            .start_time_ms = cmd->pump_start_time_ms,
+            .end_time_ms = cmd->pump_end_time_ms,
+            .phase_shift_deg = cmd->pump_phase_shift_deg,
+            .has_master = cmd->pump_has_master,
+        };
+        memcpy(pump_cmd.master, cmd->pump_master, sizeof pump_cmd.master);
+        plen = ai_pump_build_live_demo_scene_nero_write(&pump_cmd,
+                                                        cmd->scene_timeout_sec,
+                                                        payload, sizeof payload);
+    } else {
+        plen = hydra64_build_live_demo_scene_write(&cmd->state,
+                                                   cmd->scene_timeout_sec,
+                                                   payload, sizeof payload);
+    }
     if (plen == 0) { emit_result(cmd, false, "build_payload"); return; }
 
     uint8_t frame[128];
@@ -386,16 +420,22 @@ static void issue_write(const pending_command_t *cmd)
     set_state(BLC_STATE_WAITING_CONFIRM);
 }
 
-void try_connect_to(const registered_light_t *light, bool do_prime)
+static void try_connect_addr(const char *target_id,
+                             const uint8_t ble_addr[BLE_ADDR_BYTES],
+                             ble_addr_type_t ble_addr_type,
+                             cmd_device_type_t device_type,
+                             bool do_prime)
 {
     ble_addr_t peer = {0};
-    if (!light || !peer_type_to_nimble(light->ble_addr_type, &peer.type)) {
+    if (!target_id || !ble_addr || !peer_type_to_nimble(ble_addr_type, &peer.type)) {
         ESP_LOGW(TAG, "invalid peer address type");
         set_state(BLC_STATE_BACKOFF);
         return;
     }
-    hydra_ble_addr_to_nimble(peer.val, light->ble_addr);
-    strncpy(s_conn.light_id, light->light_id, LIGHT_ID_LEN - 1);
+    hydra_ble_addr_to_nimble(peer.val, ble_addr);
+    strncpy(s_conn.light_id, target_id, LIGHT_ID_LEN - 1);
+    s_conn.light_id[LIGHT_ID_LEN - 1] = '\0';
+    s_conn.device_type = device_type;
     s_chr_disc_started = false;
     set_state(BLC_STATE_CONNECTING);
 
@@ -469,6 +509,28 @@ void try_connect_to(const registered_light_t *light, bool do_prime)
     }
 }
 
+void try_connect_to(const registered_light_t *light, bool do_prime)
+{
+    if (!light) {
+        ESP_LOGW(TAG, "missing light");
+        set_state(BLC_STATE_BACKOFF);
+        return;
+    }
+    try_connect_addr(light->light_id, light->ble_addr, light->ble_addr_type,
+                     CMD_DEVICE_LIGHT, do_prime);
+}
+
+void try_connect_to_pump(const registered_pump_t *pump, bool do_prime)
+{
+    if (!pump) {
+        ESP_LOGW(TAG, "missing pump");
+        set_state(BLC_STATE_BACKOFF);
+        return;
+    }
+    try_connect_addr(pump->pump_id, pump->ble_addr, pump->ble_addr_type,
+                     CMD_DEVICE_PUMP, do_prime);
+}
+
 static void worker_tick(void)
 {
     uint64_t t = now_ms();
@@ -487,9 +549,16 @@ static void worker_tick(void)
          * (e.g. via web UI delete), disconnect promptly so we return to IDLE and allow
          * scans or commands for other lights. Without this, we stay in READY until the
          * idle timer fires (30s), blocking /api/scan with "ble busy". */
-        const registered_light_t *cur = light_registry_get(s_conn.light_id);
-        if (!cur || !cur->enabled) {
-            ESP_LOGI(TAG, "light %s removed or disabled while in READY, disconnecting now", s_conn.light_id);
+        bool current_enabled = false;
+        if (s_conn.device_type == CMD_DEVICE_PUMP) {
+            const registered_pump_t *cur = pump_registry_get(s_conn.light_id);
+            current_enabled = cur && cur->enabled;
+        } else {
+            const registered_light_t *cur = light_registry_get(s_conn.light_id);
+            current_enabled = cur && cur->enabled;
+        }
+        if (!current_enabled) {
+            ESP_LOGI(TAG, "target %s removed or disabled while in READY, disconnecting now", s_conn.light_id);
             s_intentional_disconnect = true;
             s_auto_connect_pending = false;
             ble_gap_terminate(s_conn.conn_handle, BLE_ERR_REM_USER_CONN_TERM);
@@ -533,6 +602,13 @@ static void worker_tick(void)
                 ESP_LOGI(TAG, "auto reconnecting registered light %s", light->light_id);
             }
             try_connect_to(light, true);
+            return;
+        }
+        for (size_t i = 0; i < pump_registry_count(); ++i) {
+            const registered_pump_t *pump = pump_registry_at(i);
+            if (!pump || !pump->enabled) continue;
+            if (cmd_queue_depth(pump->pump_id) == 0) continue;
+            try_connect_to_pump(pump, true);
             return;
         }
         return;

@@ -26,13 +26,16 @@ int main(int argc, char **argv)
     register_hydra64hd_tests();
     register_preset_engine_tests();
     register_light_registry_tests();
+    register_pump_registry_tests();
     register_ble_scanner_tests();
+    register_ai_pump_protocol_tests();
     register_command_queue_tests();
     register_command_engine_tests();
     register_modbus_interface_tests();
     register_mqtt_parser_tests();
     register_sun_service_tests();
     register_schedule_engine_tests();
+    register_pump_schedule_engine_tests();
     /* Future phases append calls here:
      * register_crc16_tests();           (1.1)
      * register_fsci_builder_tests();    (1.2)

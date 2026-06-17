@@ -29,6 +29,8 @@
 
 #include "ble_light_client.h"
 #include "ble_scanner.h"
+#include "ai_pump_protocol.h"
+#include "command_queue.h"
 #include "command_engine.h"
 #include "event_log.h"
 #include "light_registry.h"
@@ -36,6 +38,8 @@
 #include "mqtt_bridge.h"
 #include "modbus_interface.h"
 #include "ota_update.h"
+#include "pump_registry.h"
+#include "pump_schedule_engine.h"
 #include "schedule_engine.h"
 #include "sun_service.h"
 #include "time_service.h"
@@ -153,7 +157,7 @@ static const char STATUS_HTML[] =
 ".btn.primary{background:var(--blue);border-color:var(--blue);color:#fff}.btn.primary:hover{background:#1558c8}"
 ".btn.good{background:var(--green);border-color:var(--green);color:#fff}.btn.danger{background:#fff1f0;border-color:#f0b8b2;color:#9f2018}.btn.ghost{background:transparent}"
 ".btn:disabled{opacity:.55;cursor:not-allowed}"
-".stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:18px 0}"
+".stats{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin:18px 0}"
 ".stat{background:rgba(255,255,255,.86);border:1px solid rgba(203,213,225,.8);border-radius:8px;padding:13px 14px;box-shadow:0 8px 24px rgba(24,36,56,.06)}"
 ".tabs{display:flex;gap:8px;flex-wrap:wrap;margin:16px 0}.tab{appearance:none;border:1px solid var(--line);background:#fff;color:var(--muted);border-radius:8px;padding:.68rem .95rem;min-height:40px;font-weight:800;cursor:pointer}.tab.active{background:var(--ink);border-color:var(--ink);color:#fff}.tabpane{display:none}.tabpane.active{display:block}.tabgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;align-items:start}.tabgrid.single{grid-template-columns:1fr}"
 ".label{display:block;color:var(--muted);font-size:.72rem;font-weight:800;text-transform:uppercase;letter-spacing:.07em}"
@@ -182,12 +186,12 @@ static const char STATUS_HTML[] =
 "@media(max-width:520px){main{padding:18px 12px 28px}.stats{grid-template-columns:1fr}.panel-head{align-items:flex-start;flex-direction:column}.channels,.settings{grid-template-columns:1fr}.rename{grid-template-columns:1fr}.btn,.linkbtn{width:100%;justify-content:center}.actions,.split{width:100%}}"
 "</style></head><body>"
 "<main>"
-"<header><div><div class=eyebrow>Open-source light gateway</div><h1>HydraBridge ESP32</h1><p class=subhead>Local control for AquaIllumination Hydra lights over RS485 and MQTT.</p></div><nav class=toplinks><a class=linkbtn href=/api/logs>Logs</a><a class=linkbtn href=/api/status>Status JSON</a></nav></header>"
-"<section class=stats><div class=stat><span class=label>Controller</span><span id=ready class=value>--</span></div><div class=stat><span class=label>BLE State</span><span id=bleState class=\"value small\">--</span></div><div class=stat><span class=label>Lights</span><span id=lightCount class=value>0</span></div><div class=stat><span class=label>Uptime</span><span id=uptime class=\"value small\">--</span></div></section>"
-"<nav class=tabs><button class=\"tab active\" data-tab=lights>Lights</button><button class=tab data-tab=profiles>Profiles</button><button class=tab data-tab=schedules>Schedules</button><button class=tab data-tab=settings>Settings</button></nav>"
+"<header><div><div class=eyebrow>Open-source reef gateway</div><h1>HydraBridge ESP32</h1><p class=subhead>Local control for AquaIllumination lights and experimental AI pump support over BLE.</p></div><nav class=toplinks><a class=linkbtn href=/api/logs>Logs</a><a class=linkbtn href=/api/status>Status JSON</a></nav></header>"
+"<section class=stats><div class=stat><span class=label>Controller</span><span id=ready class=value>--</span></div><div class=stat><span class=label>BLE State</span><span id=bleState class=\"value small\">--</span></div><div class=stat><span class=label>Lights</span><span id=lightCount class=value>0</span></div><div class=stat><span class=label>Pumps</span><span id=pumpCount class=value>0</span></div><div class=stat><span class=label>Uptime</span><span id=uptime class=\"value small\">--</span></div></section>"
+"<nav class=tabs><button class=\"tab active\" data-tab=lights>Lights</button><button class=tab data-tab=profiles>Light Profiles</button><button class=tab data-tab=schedules>Lighting Schedules</button><button class=tab data-tab=pumps>Pumps</button><button class=tab data-tab=pumpschedules>Pump Schedules</button><button class=tab data-tab=settings>Settings</button></nav>"
 "<section id=tab-lights class=\"tabpane active\"><div class=tabgrid>"
 "<section class=panel><div class=panel-head><div><h2>Registered Lights</h2><p>Operate paired lights and update names.</p></div><button id=refreshLights class=\"btn ghost\">Refresh</button></div><div id=lights class=\"panel-body stack\"><div class=empty>Loading lights&hellip;</div></div></section>"
-"<section class=panel><div class=panel-head><div><h2>Discovery</h2><p>Scan for nearby Mobius devices and add new lights.</p></div><button id=scanBtn class=\"btn primary\">Scan and Auto-Add</button></div><div class=panel-body><div id=scanmsg class=meta>Ready to scan for 30 seconds.</div><div class=scanbar><span id=scanProgress></span></div><div id=scanresults class=\"stack\" style=\"margin-top:12px\"></div></div></section>"
+"<section class=panel><div class=panel-head><div><h2>Discovery</h2><p>Scan for nearby Mobius devices and add new lights or pumps.</p></div><button id=scanBtn class=\"btn primary\">Scan and Auto-Add</button></div><div class=panel-body><div id=scanmsg class=meta>Ready to scan for 30 seconds.</div><div class=scanbar><span id=scanProgress></span></div><div id=scanresults class=\"stack\" style=\"margin-top:12px\"></div></div></section>"
 "</div><section class=panel style=\"margin-top:14px\"><div class=panel-head><div><h2>Light Groups</h2><p>Create groups for applying profiles to multiple lights together.</p></div><button id=refreshGroups class=\"btn ghost\">Refresh</button></div><div class=panel-body><div class=stack><label><span class=label>Group Name</span><input id=groupName maxlength=32 placeholder=\"Display tank\"></label><div id=groupMembers class=stack></div><div class=split><button id=saveGroup class=\"btn primary\">Save Group</button></div><div id=groups class=stack></div></div></div></section></section>"
 "<section id=tab-profiles class=tabpane><div class=tabgrid>"
 "<section class=panel><div class=panel-head><div><h2>Profile Builder</h2><p>Save channel mixes and apply them to a selected light or group.</p></div></div><div class=panel-body><div class=stack><label><span class=label>Target</span><select id=targetSelect></select></label><label><span class=label>Profile Name</span><input id=profname maxlength=16 value=reef-day></label><label><span class=label>Description</span><textarea id=profdesc maxlength=128 placeholder=\"What this profile is for\"></textarea></label><div class=split><button id=saveProfile class=\"btn primary\">Save Profile</button><button id=applyCurrent class=btn>Apply Profile</button><button id=intUp class=btn>+ Intensity</button><button id=intDown class=btn>- Intensity</button></div></div><div id=channels class=channels></div></div></section>"
@@ -196,6 +200,14 @@ static const char STATUS_HTML[] =
 "<section id=tab-schedules class=tabpane><div class=tabgrid>"
 "<section class=panel><div class=panel-head><div><h2>Schedule Builder</h2><p>Automate profiles for a light or group.</p></div></div><div class=panel-body><div class=settings><input id=schedId type=hidden><label class=\"check wide\"><input id=schedEnabled type=checkbox checked><span><b>Enabled</b><br><span class=meta>Run this schedule when time is valid.</span></span></label><label><span class=label>Name</span><input id=schedName maxlength=32 placeholder=\"Reef day\"></label><label><span class=label>Target</span><select id=schedTarget></select></label><label><span class=label>Profile</span><select id=schedProfile></select></label><label><span class=label>Day Intensity %</span><input id=schedIntensity type=number min=0 max=100 value=70></label><label><span class=label>End Intensity %</span><input id=schedEndIntensity type=number min=0 max=100 value=0></label><label><span class=label>Start Trigger</span><select id=schedStartTrig><option value=0>Fixed time</option><option value=1>Sunrise</option><option value=2>Sunset</option></select></label><label><span class=label>End Trigger</span><select id=schedEndTrig><option value=0>Fixed time</option><option value=1>Sunrise</option><option value=2>Sunset</option></select></label><label><span class=label>Start Time</span><input id=schedStartTime type=time value=08:00></label><label><span class=label>End Time</span><input id=schedEndTime type=time value=18:00></label><label><span class=label>Start Offset Min</span><input id=schedStartOffset type=number min=-720 max=720 value=0></label><label><span class=label>End Offset Min</span><input id=schedEndOffset type=number min=-720 max=720 value=0></label><label><span class=label>Ramp Up Min</span><input id=schedRampUp type=number min=0 max=1440 value=90></label><label><span class=label>Ramp Down Min</span><input id=schedRampDown type=number min=0 max=1440 value=90></label><div class=\"split wide\"><button id=saveSchedule class=\"btn primary\">Save Schedule</button><button id=newSchedule class=btn>New</button></div></div></div></section>"
 "<section class=panel><div class=panel-head><div><h2>Saved Schedules</h2><p id=scheduleNext>Next action loading.</p></div><button id=refreshSchedules class=\"btn ghost\">Refresh</button></div><div class=panel-body><div id=schedules class=stack><div class=empty>Loading schedules&hellip;</div></div></div></section>"
+"</div></section>"
+"<section id=tab-pumps class=tabpane><div class=tabgrid>"
+"<section class=panel><div class=panel-head><div><h2>Registered Pumps</h2><p>Experimental Orbit/Nero-style local controls.</p></div><button id=refreshPumps class=\"btn ghost\">Refresh</button></div><div id=pumps class=\"panel-body stack\"><div class=empty>Loading pumps&hellip;</div></div></section>"
+"<section class=panel><div class=panel-head><div><h2>Manual Pump Control</h2><p>Send an experimental live-demo pump scene.</p></div><span class=pill>Experimental</span></div><div class=panel-body><div class=settings><label class=wide><span class=label>Pump</span><select id=pumpTarget></select></label><label><span class=label>Mode</span><select id=pumpMode><option value=1>Constant Speed</option><option value=15>Random</option><option value=16>Pulse</option><option value=13>Feed</option></select></label><label><span class=label>Max Speed %</span><input id=pumpSpeed type=number min=0 max=100 value=40></label><label><span class=label>Min Speed %</span><input id=pumpMinSpeed type=number min=0 max=100 value=20></label><label><span class=label>Variance %</span><input id=pumpVariance type=number min=0 max=100 value=50></label><label><span class=label>On Time ms</span><input id=pumpOnMs type=number min=100 max=60000 value=1000></label><label><span class=label>Off Time ms</span><input id=pumpOffMs type=number min=100 max=60000 value=1000></label><div class=\"split wide\"><button id=applyPump class=\"btn primary\">Apply</button><button id=feedPump class=btn>Feed</button><button id=offPump class=\"btn danger\">Off</button></div></div></div></section>"
+"</div></section>"
+"<section id=tab-pumpschedules class=tabpane><div class=tabgrid>"
+"<section class=panel><div class=panel-head><div><h2>Pump Schedule Builder</h2><p>Run one pump command at start and another at end.</p></div></div><div class=panel-body><div class=settings><input id=pumpSchedId type=hidden><label class=\"check wide\"><input id=pumpSchedEnabled type=checkbox checked><span><b>Enabled</b><br><span class=meta>Run this pump schedule when time is valid.</span></span></label><label><span class=label>Name</span><input id=pumpSchedName maxlength=32 placeholder=\"Reef flow\"></label><label><span class=label>Pump</span><select id=pumpSchedTarget></select></label><label><span class=label>Active Mode</span><select id=pumpSchedActiveMode><option value=1>Constant Speed</option><option value=15>Random</option><option value=16>Pulse</option><option value=13>Feed</option></select></label><label><span class=label>Active Max %</span><input id=pumpSchedActiveSpeed type=number min=0 max=100 value=40></label><label><span class=label>Active Min %</span><input id=pumpSchedActiveMin type=number min=0 max=100 value=20></label><label><span class=label>Active Variance %</span><input id=pumpSchedActiveVariance type=number min=0 max=100 value=50></label><label><span class=label>Active On ms</span><input id=pumpSchedActiveOn type=number min=100 max=60000 value=1000></label><label><span class=label>Active Off ms</span><input id=pumpSchedActiveOff type=number min=100 max=60000 value=1000></label><label><span class=label>End Mode</span><select id=pumpSchedEndMode><option value=1>Constant Speed</option><option value=15>Random</option><option value=16>Pulse</option><option value=13>Feed</option></select></label><label><span class=label>End Max %</span><input id=pumpSchedEndSpeed type=number min=0 max=100 value=20></label><label><span class=label>End Min %</span><input id=pumpSchedEndMin type=number min=0 max=100 value=10></label><label><span class=label>End Variance %</span><input id=pumpSchedEndVariance type=number min=0 max=100 value=50></label><label><span class=label>End On ms</span><input id=pumpSchedEndOn type=number min=100 max=60000 value=1000></label><label><span class=label>End Off ms</span><input id=pumpSchedEndOff type=number min=100 max=60000 value=1000></label><label><span class=label>Start Trigger</span><select id=pumpSchedStartTrig><option value=0>Fixed time</option><option value=1>Sunrise</option><option value=2>Sunset</option></select></label><label><span class=label>End Trigger</span><select id=pumpSchedEndTrig><option value=0>Fixed time</option><option value=1>Sunrise</option><option value=2>Sunset</option></select></label><label><span class=label>Start Time</span><input id=pumpSchedStartTime type=time value=08:00></label><label><span class=label>End Time</span><input id=pumpSchedEndTime type=time value=18:00></label><label><span class=label>Start Offset Min</span><input id=pumpSchedStartOffset type=number min=-720 max=720 value=0></label><label><span class=label>End Offset Min</span><input id=pumpSchedEndOffset type=number min=-720 max=720 value=0></label><div class=\"split wide\"><button id=savePumpSchedule class=\"btn primary\">Save Pump Schedule</button><button id=newPumpSchedule class=btn>New</button></div></div></div></section>"
+"<section class=panel><div class=panel-head><div><h2>Saved Pump Schedules</h2><p id=pumpScheduleNext>Next pump action loading.</p></div><button id=refreshPumpSchedules class=\"btn ghost\">Refresh</button></div><div class=panel-body><div id=pumpSchedules class=stack><div class=empty>Loading pump schedules&hellip;</div></div></div></section>"
 "</div></section>"
 "<section id=tab-settings class=tabpane><div class=tabgrid>"
 "<section class=panel><div class=panel-head><div><h2>Time Sync</h2><p>Keep local time for schedules and logs.</p></div><span id=timeState class=pill>Loading</span></div><div class=panel-body><div class=settings><label class=\"check wide\"><input id=timeEnabled type=checkbox><span><b>Enable NTP time sync</b><br><span class=meta>Uses SNTP and does not block local control.</span></span></label><label><span class=label>Time Server</span><input id=timeServer maxlength=64></label><label><span class=label>Timezone</span><select id=timeTz><option value=UTC0>UTC</option><option value=\"EST5EDT,M3.2.0/2,M11.1.0/2\">Eastern</option><option value=\"CST6CDT,M3.2.0/2,M11.1.0/2\">Central</option><option value=\"MST7MDT,M3.2.0/2,M11.1.0/2\">Mountain</option><option value=\"PST8PDT,M3.2.0/2,M11.1.0/2\">Pacific</option><option value=MST7>Arizona</option><option value=HST10>Hawaii</option></select></label><div class=\"split wide\"><button id=saveTime class=\"btn primary\">Save Time</button><span id=timeNow class=meta>--</span></div></div></div></section>"
@@ -206,7 +218,7 @@ static const char STATUS_HTML[] =
 "</div></section><div id=toast class=toast></div></main>"
 "<script>"
 "const $=id=>document.getElementById(id);"
-"let appLights=[];let appGroups=[];let appProfiles=[];let appSchedules=[];"
+"let appLights=[];let appGroups=[];let appProfiles=[];let appSchedules=[];let appPumps=[];let appPumpSchedules=[];"
 "const channelNames=['brightness','coolwhite','blue','deepred','violet','uv','green','royalblue','moonlight'];"
 "const channelLabels=['Brightness','Cool White','Blue','Deep Red','Violet','UV','Green','Royal Blue','Moonlight'];"
 "const stateNames={0:'Disabled',1:'Idle',3:'Connecting',4:'Discovering',5:'Subscribing',7:'Ready',8:'Writing',9:'Waiting Confirm',10:'Cooldown',11:'Disconnecting',12:'Error',13:'Backoff'};"
@@ -219,11 +231,12 @@ static const char STATUS_HTML[] =
 "const jdel=u=>fetchJson(u,{method:'DELETE'});"
 "function fmtUptime(ms){let s=Math.floor((ms||0)/1000),h=Math.floor(s/3600),m=Math.floor((s%3600)/60);return h?`${h}h ${m}m`:`${m}m ${s%60}s`;}"
 "function bleDot(st){if(st===7)return'ready';if(st===12||st===13)return'err';if(st&&st!==1)return'busy';return'';}"
-"async function refreshStatus(){try{const s=await jget('/api/status');$('ready').textContent=s.controller_ready?'Ready':'Offline';$('lightCount').textContent=s.registered_lights||0;$('uptime').textContent=fmtUptime(s.uptime_ms);$('bleState').textContent=stateNames[s.ble_state]||String(s.ble_state);if($('scheduleNext'))$('scheduleNext').textContent=s.next_schedule_action||'No scheduled action';}catch(e){$('ready').textContent='Error';$('bleState').textContent='Status failed';}}"
+"async function refreshStatus(){try{const s=await jget('/api/status');$('ready').textContent=s.controller_ready?'Ready':'Offline';$('lightCount').textContent=s.registered_lights||0;$('pumpCount').textContent=s.registered_pumps||0;$('uptime').textContent=fmtUptime(s.uptime_ms);$('bleState').textContent=stateNames[s.ble_state]||String(s.ble_state);if($('scheduleNext'))$('scheduleNext').textContent=s.next_schedule_action||'No scheduled action';if($('pumpScheduleNext'))$('pumpScheduleNext').textContent=s.next_pump_schedule_action||'No pump action';}catch(e){$('ready').textContent='Error';$('bleState').textContent='Status failed';}}"
 "function addMeta(parent,items){const m=el('div','meta');for(const it of items){const p=el('span','pill',it);m.appendChild(p);}parent.appendChild(m);}"
 "function fillTargetSelect(sel){if(!sel)return;const old=sel.value;sel.innerHTML='';for(const l of appLights){const o=document.createElement('option');o.value='light:'+l.light_id;o.textContent='Light: '+(l.display_name||l.light_id);sel.appendChild(o);}for(const g of appGroups){const o=document.createElement('option');o.value='group:'+g.group_id;o.textContent='Group: '+(g.display_name||g.group_id);sel.appendChild(o);}if(old)sel.value=old;if(!sel.value&&sel.options.length)sel.selectedIndex=0;}"
 "function refreshTargetSelect(){fillTargetSelect($('targetSelect'));fillTargetSelect($('schedTarget'));}"
 "function refreshScheduleProfileOptions(){const sel=$('schedProfile');if(!sel)return;const old=sel.value;sel.innerHTML='';for(const p of appProfiles){const o=document.createElement('option');o.value=p.name;o.textContent=p.name;sel.appendChild(o);}if(old)sel.value=old;if(!sel.value&&sel.options.length)sel.selectedIndex=0;}"
+"function refreshPumpTargetSelects(){['pumpTarget','pumpSchedTarget'].forEach(id=>{const sel=$(id);if(!sel)return;const old=sel.value;sel.innerHTML='';for(const p of appPumps){const o=document.createElement('option');o.value=p.pump_id;o.textContent=p.display_name||p.pump_id;sel.appendChild(o);}if(old)sel.value=old;if(!sel.value&&sel.options.length)sel.selectedIndex=0;});}"
 "function renderGroupMembers(){const box=$('groupMembers');if(!box)return;box.innerHTML='';if(!appLights.length){box.appendChild(el('div','empty','Add lights before creating a group.'));return;}for(const l of appLights){const lab=el('label','check');const cb=document.createElement('input');cb.type='checkbox';cb.value=l.light_id;cb.className='groupMember';lab.appendChild(cb);lab.appendChild(el('span',null,l.display_name||l.light_id));box.appendChild(lab);}}"
 "async function refreshLights(){try{const r=await jget('/api/lights');appLights=r.lights||[];const box=$('lights');box.innerHTML='';if(!appLights.length){box.appendChild(el('div','empty','No registered lights yet. Start a discovery scan to add one.'));}else{for(const l of appLights)box.appendChild(lightRow(l));}renderGroupMembers();refreshTargetSelect();}catch(e){toast('Lights failed: '+e.message);}}"
 "function lightRow(l){const row=el('article','row');const left=el('div');const title=el('div','row-title');const dot=el('span','dot');title.appendChild(dot);title.appendChild(el('span','name',l.display_name||l.light_id));title.appendChild(el('span','pill',l.enabled?'Enabled':'Disabled'));left.appendChild(title);addMeta(left,[modelLabel(l.model),l.serial||'No serial','RSSI '+l.last_seen_rssi,l.light_id]);const ren=el('div','rename');const inp=document.createElement('input');inp.value=l.display_name||'';inp.maxLength=32;inp.setAttribute('aria-label','Light name');const save=el('button','btn','Save Name');save.onclick=()=>renameLight(l.light_id,inp.value);ren.appendChild(inp);ren.appendChild(save);left.appendChild(ren);const act=el('div','actions');[['On',()=>cmd(l.light_id,'on'),'good'],['Off',()=>cmd(l.light_id,'off'),'danger'],['+ Int',()=>intensity(l.light_id,50),''],['- Int',()=>intensity(l.light_id,-50),''],['Remove',()=>removeLight(l.light_id),'ghost']].forEach(a=>{const b=el('button','btn '+a[2],a[0]);b.onclick=a[1];act.appendChild(b);});row.appendChild(left);row.appendChild(act);return row;}"
@@ -234,9 +247,16 @@ static const char STATUS_HTML[] =
 "async function saveGroup(){const name=($('groupName').value||'').trim();if(!name)return toast('Group name is required');if(/[\"\\\\<>]/.test(name))return toast('Group name cannot contain quotes, backslashes, <, or >');const members=[...document.querySelectorAll('.groupMember:checked')].map(c=>c.value);if(!members.length)return toast('Select at least one light');const gid='grp-'+name.replace(/[^a-zA-Z0-9]/g,'').slice(0,20);try{await jpost('/api/groups',{group_id:gid,display_name:name,members:members.join(',')});toast('Group saved');$('groupName').value='';document.querySelectorAll('.groupMember').forEach(c=>c.checked=false);refreshGroups();}catch(e){toast('Group save failed: '+e.message);}}"
 "async function deleteGroup(id){if(!confirm('Delete group '+id+'?'))return;try{await jdel('/api/groups/'+id);toast('Group deleted');refreshGroups();}catch(e){toast('Delete group failed: '+e.message);}}"
 "async function startScan(){const btn=$('scanBtn'),msg=$('scanmsg'),bar=$('scanProgress');btn.disabled=true;bar.style.width='0';try{const d=await jpost('/api/scan');const dur=(d&&d.duration_ms)||30000;const start=Date.now();msg.textContent='Scanning for nearby Mobius lights...';clearInterval(window.scanTimer);window.scanTimer=setInterval(()=>{const pct=Math.min(100,((Date.now()-start)/dur)*100);bar.style.width=pct+'%';},250);setTimeout(refreshScanResults,dur+1200);}catch(e){btn.disabled=false;msg.textContent='Scan failed';toast('Scan failed: '+e.message);}}"
-"async function refreshScanResults(){clearInterval(window.scanTimer);$('scanProgress').style.width='100%';$('scanBtn').disabled=false;try{const r=await jget('/api/scan/results');const box=$('scanresults');box.innerHTML='';const list=r.results||[];$('scanmsg').textContent=list.length?`${list.length} device${list.length===1?'':'s'} found.`:'No devices found. Put the light in pairing mode and scan again.';for(const l of list)box.appendChild(scanRow(l));refreshLights();}catch(e){toast('Scan results failed: '+e.message);}}"
-"function scanRow(l){let serialForLid=l.serial&&l.serial.length>0&&l.model!=0?l.serial:l.ble_addr.replace(/:/g,'').toUpperCase().slice(0,10);const lid='hydra64-'+serialForLid.replace(/[^a-zA-Z0-9]/g,'').slice(0,10);let label=l.model==0?'Unknown pairing device':modelLabel(l.model);const shown=l.name||label,useModel=l.model||335,useSerial=l.serial&&l.serial.length>0?l.serial:l.ble_addr;const row=el('article','row');const left=el('div');const title=el('div','row-title');title.appendChild(el('span','name',shown));title.appendChild(el('span','pill',label));left.appendChild(title);addMeta(left,[useSerial,l.ble_addr+' t='+l.ble_addr_type,'RSSI '+l.rssi]);const act=el('div','actions');const b=el('button','btn primary','Add Light');b.onclick=()=>addLight(lid,shown,l.ble_addr,l.ble_addr_type,useSerial,useModel);act.appendChild(b);row.appendChild(left);row.appendChild(act);return row;}"
+"async function refreshScanResults(){clearInterval(window.scanTimer);$('scanProgress').style.width='100%';$('scanBtn').disabled=false;try{const r=await jget('/api/scan/results');const box=$('scanresults');box.innerHTML='';const list=r.results||[];$('scanmsg').textContent=list.length?`${list.length} device${list.length===1?'':'s'} found.`:'No devices found. Put the device in pairing mode and scan again.';for(const l of list)box.appendChild(scanRow(l));refreshLights();refreshPumps();}catch(e){toast('Scan results failed: '+e.message);}}"
+"function scanRow(l){let serial=l.serial&&l.serial.length>0&&l.model!=0?l.serial:l.ble_addr.replace(/:/g,'').toUpperCase().slice(0,10);const clean=serial.replace(/[^a-zA-Z0-9]/g,'').slice(0,10);const isPump=l.device_type==='pump';const lid='hydra64-'+clean,pid='pump-'+clean;let label=isPump?'AI Pump':(l.model==0?'Unknown pairing device':modelLabel(l.model));const shown=l.name||label,useModel=l.model||335,useSerial=l.serial&&l.serial.length>0?l.serial:l.ble_addr;const row=el('article','row');const left=el('div');const title=el('div','row-title');title.appendChild(el('span','name',shown));title.appendChild(el('span','pill',label));left.appendChild(title);addMeta(left,[useSerial,l.ble_addr+' t='+l.ble_addr_type,'RSSI '+l.rssi]);const act=el('div','actions');const b=el('button','btn primary',isPump?'Add Pump':'Add Light');b.onclick=()=>isPump?addPump(pid,shown,l.ble_addr,l.ble_addr_type,useSerial,useModel):addLight(lid,shown,l.ble_addr,l.ble_addr_type,useSerial,useModel);act.appendChild(b);if(!isPump){const pb=el('button','btn','Add as Pump');pb.onclick=()=>addPump(pid,shown,l.ble_addr,l.ble_addr_type,useSerial,useModel);act.appendChild(pb);}row.appendChild(left);row.appendChild(act);return row;}"
 "async function addLight(id,name,addr,addr_type,serial,model){try{const r=await jpost('/api/lights',{light_id:id,display_name:name,ble_addr:addr,ble_addr_type:addr_type,serial:serial,model:model});toast(r.added?'Light added':'Light already registered');refreshLights();}catch(e){toast('Add failed: '+e.message);}}"
+"async function addPump(id,name,addr,addr_type,serial,model){try{const r=await jpost('/api/pumps',{pump_id:id,display_name:name,ble_addr:addr,ble_addr_type:addr_type,serial:serial,model:model});toast(r.added?'Pump added':'Pump already registered');refreshPumps();}catch(e){toast('Add pump failed: '+e.message);}}"
+"async function refreshPumps(){try{const r=await jget('/api/pumps');appPumps=r.pumps||[];const box=$('pumps');if(!box)return;box.innerHTML='';if(!appPumps.length){box.appendChild(el('div','empty','No registered pumps yet. Scan to add an AI pump.'));}else{for(const p of appPumps)box.appendChild(pumpRow(p));}refreshPumpTargetSelects();refreshStatus();}catch(e){toast('Pumps failed: '+e.message);}}"
+"function pumpRow(p){const row=el('article','row');const left=el('div');const title=el('div','row-title');title.appendChild(el('span','name',p.display_name||p.pump_id));title.appendChild(el('span','pill',p.enabled?'Enabled':'Disabled'));title.appendChild(el('span','pill','Experimental'));left.appendChild(title);addMeta(left,[p.serial||p.pump_id,'model '+(p.model||0),'RSSI '+p.last_seen_rssi,'mode '+pumpModeLabel(p.last_mode||0),'speed '+(p.last_speed_percent||0)+'%']);const ren=el('div','rename');const inp=document.createElement('input');inp.value=p.display_name||'';inp.maxLength=32;const rb=el('button','btn','Rename');rb.onclick=()=>renamePump(p.pump_id,inp.value);ren.appendChild(inp);ren.appendChild(rb);left.appendChild(ren);const act=el('div','actions');[['Apply',()=>pumpCommand(p.pump_id,pumpCommandBody()),'primary'],['Random',()=>pumpCommand(p.pump_id,{mode:15,speed_percent:60,min_speed_percent:20,variance_percent:50,timeout:60}),''],['Pulse',()=>pumpCommand(p.pump_id,{mode:16,speed_percent:60,on_time_ms:1000,off_time_ms:1000,timeout:60}),''],['Feed',()=>pumpCommand(p.pump_id,{mode:13,speed_percent:10,timeout:60}),''],['Off',()=>pumpCommand(p.pump_id,{mode:1,speed_percent:0,timeout:60}),'danger'],['Remove',()=>removePump(p.pump_id),'danger']].forEach(a=>{const b=el('button','btn '+a[2],a[0]);b.onclick=a[1];act.appendChild(b);});row.appendChild(left);row.appendChild(act);return row;}"
+"async function renamePump(id,name){const clean=(name||'').trim();if(!clean)return toast('Name is required');if(/[\"\\\\<>]/.test(clean))return toast('Name cannot contain quotes, backslashes, <, or >');try{await jpost('/api/pumps/'+id+'/rename',{display_name:clean});toast('Pump renamed');refreshPumps();}catch(e){toast('Pump rename failed: '+e.message);}}"
+"async function removePump(id){if(!confirm('Remove '+id+'?'))return;try{await jdel('/api/pumps/'+id);toast('Pump removed');refreshPumps();}catch(e){toast('Remove pump failed: '+e.message);}}"
+"function pumpCommandBody(){return{mode:parseInt($('pumpMode').value)||1,speed_percent:parseInt($('pumpSpeed').value)||0,min_speed_percent:parseInt($('pumpMinSpeed').value)||0,variance_percent:parseInt($('pumpVariance').value)||0,on_time_ms:parseInt($('pumpOnMs').value)||1000,off_time_ms:parseInt($('pumpOffMs').value)||1000,timeout:60};}"
+"async function pumpCommand(id,body){if(!id)return toast('Select a pump first');try{await jpost('/api/pumps/'+id+'/command',body);toast('Pump command queued');refreshPumps();}catch(e){toast('Pump command failed: '+e.message);}}"
 "async function cmd(id,power){try{await jpost('/api/lights/'+id+'/command',{power:power,timeout:60});toast(power==='on'?'Power on queued':'Power off queued');}catch(e){toast('Command failed: '+e.message);}}"
 "async function intensity(id,delta){try{await jpost('/api/lights/'+id+'/command',{intensity_delta:delta,timeout:60});toast('Intensity command queued');}catch(e){toast('Intensity failed: '+e.message);}}"
 "function currentTarget(){const v=$('targetSelect').value||'';const p=v.split(':');return{type:p[0]||'',id:p.slice(1).join(':')};}"
@@ -262,6 +282,14 @@ static const char STATUS_HTML[] =
 "function scheduleRow(s){const row=el('article','row');const left=el('div');const title=el('div','row-title');title.appendChild(el('span','name',s.name||s.schedule_id));title.appendChild(el('span','pill',s.enabled?'Enabled':'Disabled'));left.appendChild(title);const target=(s.target_type===1?'Group ':'Light ')+(s.target_id||'');addMeta(left,[target,s.profile_name||'No profile',(s.intensity_percent||0)+'%','Start '+trigLabel(s.start_trigger)+' '+minToTime(s.start_minute||0),'End '+trigLabel(s.end_trigger)+' '+minToTime(s.end_minute||0)]);const act=el('div','actions');[['Edit',()=>loadSchedule(s),'primary'],['Delete',()=>deleteSchedule(s.schedule_id),'danger']].forEach(a=>{const b=el('button','btn '+a[2],a[0]);b.onclick=a[1];act.appendChild(b);});row.appendChild(left);row.appendChild(act);return row;}"
 "function loadSchedule(s){$('schedId').value=s.schedule_id||'';$('schedEnabled').checked=!!s.enabled;$('schedName').value=s.name||'';$('schedTarget').value=(s.target_type===1?'group:':'light:')+(s.target_id||'');$('schedProfile').value=s.profile_name||'';$('schedIntensity').value=s.intensity_percent||0;$('schedEndIntensity').value=s.end_intensity_percent||0;$('schedStartTrig').value=s.start_trigger||0;$('schedEndTrig').value=s.end_trigger||0;$('schedStartTime').value=minToTime(s.start_minute||0);$('schedEndTime').value=minToTime(s.end_minute||0);$('schedStartOffset').value=s.start_offset_min||0;$('schedEndOffset').value=s.end_offset_min||0;$('schedRampUp').value=s.ramp_up_min||0;$('schedRampDown').value=s.ramp_down_min||0;document.querySelector('[data-tab=schedules]').click();}"
 "async function deleteSchedule(id){if(!confirm('Delete schedule '+id+'?'))return;try{await jdel('/api/schedules/'+encodeURIComponent(id));toast('Schedule deleted');clearScheduleForm();refreshSchedules();}catch(e){toast('Delete schedule failed: '+e.message);}}"
+"function clearPumpScheduleForm(){$('pumpSchedId').value='';$('pumpSchedEnabled').checked=true;$('pumpSchedName').value='';$('pumpSchedActiveMode').value=1;$('pumpSchedActiveSpeed').value=40;$('pumpSchedActiveMin').value=20;$('pumpSchedActiveVariance').value=50;$('pumpSchedActiveOn').value=1000;$('pumpSchedActiveOff').value=1000;$('pumpSchedEndMode').value=1;$('pumpSchedEndSpeed').value=20;$('pumpSchedEndMin').value=10;$('pumpSchedEndVariance').value=50;$('pumpSchedEndOn').value=1000;$('pumpSchedEndOff').value=1000;$('pumpSchedStartTrig').value=0;$('pumpSchedEndTrig').value=0;$('pumpSchedStartTime').value='08:00';$('pumpSchedEndTime').value='18:00';$('pumpSchedStartOffset').value=0;$('pumpSchedEndOffset').value=0;refreshPumpTargetSelects();}"
+"function pumpScheduleBody(){return{schedule_id:$('pumpSchedId').value||'',enabled:$('pumpSchedEnabled').checked,name:($('pumpSchedName').value||'Pump Schedule').trim(),target_id:$('pumpSchedTarget').value||'',active_mode:parseInt($('pumpSchedActiveMode').value)||1,active_speed_percent:parseInt($('pumpSchedActiveSpeed').value)||0,active_min_speed_percent:parseInt($('pumpSchedActiveMin').value)||0,active_variance_percent:parseInt($('pumpSchedActiveVariance').value)||0,active_on_time_ms:parseInt($('pumpSchedActiveOn').value)||1000,active_off_time_ms:parseInt($('pumpSchedActiveOff').value)||1000,end_mode:parseInt($('pumpSchedEndMode').value)||1,end_speed_percent:parseInt($('pumpSchedEndSpeed').value)||0,end_min_speed_percent:parseInt($('pumpSchedEndMin').value)||0,end_variance_percent:parseInt($('pumpSchedEndVariance').value)||0,end_on_time_ms:parseInt($('pumpSchedEndOn').value)||1000,end_off_time_ms:parseInt($('pumpSchedEndOff').value)||1000,start_trigger:parseInt($('pumpSchedStartTrig').value)||0,end_trigger:parseInt($('pumpSchedEndTrig').value)||0,start_minute:timeToMin($('pumpSchedStartTime').value),end_minute:timeToMin($('pumpSchedEndTime').value),start_offset_min:parseInt($('pumpSchedStartOffset').value)||0,end_offset_min:parseInt($('pumpSchedEndOffset').value)||0};}"
+"async function savePumpSchedule(){const b=pumpScheduleBody();if(!b.target_id)return toast('Select a pump');if(/[\"\\\\<>]/.test(b.name+b.target_id))return toast('Pump schedule text cannot contain quotes, backslashes, <, or >');try{const r=await jpost('/api/pump-schedules',b);$('pumpSchedId').value=r.schedule_id||'';toast('Pump schedule saved');refreshPumpSchedules();}catch(e){toast('Pump schedule save failed: '+e.message);}}"
+"async function refreshPumpSchedules(){try{const r=await jget('/api/pump-schedules');appPumpSchedules=r.schedules||[];$('pumpScheduleNext').textContent=r.next_action||'No pump action';const box=$('pumpSchedules');if(!box)return;box.innerHTML='';if(!appPumpSchedules.length){box.appendChild(el('div','empty','No pump schedules yet.'));return;}for(const s of appPumpSchedules)box.appendChild(pumpScheduleRow(s));}catch(e){toast('Pump schedules failed: '+e.message);}}"
+"function pumpModeLabel(v){return({1:'Constant',2:'Lagoon',3:'Reef Crest',4:'Nutrient',5:'Tidal',6:'Short Pulse',7:'Gyre',8:'Transition',9:'Expanding Pulse',10:'Sync',12:'EcoSmart Back',13:'Feed',14:'Battery',15:'Random',16:'Pulse'})[v]||String(v);}"
+"function pumpScheduleRow(s){const row=el('article','row');const left=el('div');const title=el('div','row-title');title.appendChild(el('span','name',s.name||s.schedule_id));title.appendChild(el('span','pill',s.enabled?'Enabled':'Disabled'));left.appendChild(title);addMeta(left,['Pump '+(s.target_id||''),'Start '+trigLabel(s.start_trigger)+' '+minToTime(s.start_minute||0)+' '+pumpModeLabel(s.active_mode)+' '+(s.active_speed_percent||0)+'%','End '+trigLabel(s.end_trigger)+' '+minToTime(s.end_minute||0)+' '+pumpModeLabel(s.end_mode)+' '+(s.end_speed_percent||0)+'%']);const act=el('div','actions');[['Edit',()=>loadPumpSchedule(s),'primary'],['Delete',()=>deletePumpSchedule(s.schedule_id),'danger']].forEach(a=>{const b=el('button','btn '+a[2],a[0]);b.onclick=a[1];act.appendChild(b);});row.appendChild(left);row.appendChild(act);return row;}"
+"function loadPumpSchedule(s){$('pumpSchedId').value=s.schedule_id||'';$('pumpSchedEnabled').checked=!!s.enabled;$('pumpSchedName').value=s.name||'';$('pumpSchedTarget').value=s.target_id||'';$('pumpSchedActiveMode').value=s.active_mode||1;$('pumpSchedActiveSpeed').value=s.active_speed_percent||0;$('pumpSchedActiveMin').value=s.active_min_speed_percent||0;$('pumpSchedActiveVariance').value=s.active_variance_percent||0;$('pumpSchedActiveOn').value=s.active_on_time_ms||1000;$('pumpSchedActiveOff').value=s.active_off_time_ms||1000;$('pumpSchedEndMode').value=s.end_mode||1;$('pumpSchedEndSpeed').value=s.end_speed_percent||0;$('pumpSchedEndMin').value=s.end_min_speed_percent||0;$('pumpSchedEndVariance').value=s.end_variance_percent||0;$('pumpSchedEndOn').value=s.end_on_time_ms||1000;$('pumpSchedEndOff').value=s.end_off_time_ms||1000;$('pumpSchedStartTrig').value=s.start_trigger||0;$('pumpSchedEndTrig').value=s.end_trigger||0;$('pumpSchedStartTime').value=minToTime(s.start_minute||0);$('pumpSchedEndTime').value=minToTime(s.end_minute||0);$('pumpSchedStartOffset').value=s.start_offset_min||0;$('pumpSchedEndOffset').value=s.end_offset_min||0;document.querySelector('[data-tab=pumpschedules]').click();}"
+"async function deletePumpSchedule(id){if(!confirm('Delete pump schedule '+id+'?'))return;try{await jdel('/api/pump-schedules/'+encodeURIComponent(id));toast('Pump schedule deleted');clearPumpScheduleForm();refreshPumpSchedules();}catch(e){toast('Delete pump schedule failed: '+e.message);}}"
 "async function refreshTimeConfig(){try{const r=await jget('/api/config/time');$('timeEnabled').checked=!!r.enabled;$('timeServer').value=r.server||'time.nist.gov';$('timeTz').value=r.timezone||'UTC0';$('timeState').textContent=r.synced?'Synced':'Unsynced';$('timeNow').textContent=(r.current_local||'--')+' last sync '+(r.last_sync_local||'--');}catch(e){$('timeState').textContent='Config failed';toast('Time config failed: '+e.message);}}"
 "async function saveTimeConfig(){const b={enabled:$('timeEnabled').checked,server:($('timeServer').value||'time.nist.gov').trim(),timezone:$('timeTz').value||'UTC0'};try{await jpost('/api/config/time',b);toast('Time settings saved');refreshTimeConfig();refreshStatus();}catch(e){toast('Time save failed: '+e.message);}}"
 "async function refreshSunConfig(){try{const r=await jget('/api/config/sun');$('sunEnabled').checked=!!r.enabled;$('sunLabel').value=r.location_label||'My Reef';$('sunLat').value=r.latitude||0;$('sunLon').value=r.longitude||0;$('sunState').textContent=r.valid?'Ready':'Waiting';$('sunTimes').textContent='Sunrise '+(r.sunrise_local||'--:--')+' / Sunset '+(r.sunset_local||'--:--');}catch(e){$('sunState').textContent='Config failed';toast('Sun config failed: '+e.message);}}"
@@ -275,9 +303,9 @@ static const char STATUS_HTML[] =
 "function mqttStatusLabel(s){return({0:'Disabled',1:'Disconnected',2:'Connected'})[s]||String(s);}"
 "async function refreshMqttConfig(){try{const r=await jget('/api/config/mqtt');$('mqEnabled').checked=!!r.enabled;$('mqHost').value=r.host||'';$('mqPort').value=r.port||1883;$('mqTls').checked=!!r.use_tls;$('mqUser').value=r.username||'';$('mqPass').value=r.password_set?'********':'';$('mqClient').value=r.client_id||'';$('mqKeepalive').value=r.keepalive_sec||60;$('mqBase').value=r.base_topic||'aihydra';$('mqHa').checked=!!r.home_assistant_discovery;$('mqHaPrefix').value=r.home_assistant_prefix||'homeassistant';$('mqttState').textContent=mqttStatusLabel(r.status);}catch(e){$('mqttState').textContent='Config failed';toast('MQTT config failed: '+e.message);}}"
 "async function saveMqttConfig(){const pass=$('mqPass').value;const b={enabled:$('mqEnabled').checked,host:($('mqHost').value||'').trim(),port:parseInt($('mqPort').value)||1883,use_tls:$('mqTls').checked,username:($('mqUser').value||'').trim(),client_id:($('mqClient').value||'').trim(),keepalive_sec:parseInt($('mqKeepalive').value)||60,base_topic:($('mqBase').value||'aihydra').trim(),home_assistant_discovery:$('mqHa').checked,home_assistant_prefix:($('mqHaPrefix').value||'homeassistant').trim()};if(pass!=='********')b.password=pass;try{const r=await jpost('/api/config/mqtt',b);toast(r.applied?'MQTT settings applied':'MQTT settings saved');refreshMqttConfig();refreshStatus();}catch(e){toast('MQTT save failed: '+e.message);}}"
-"$('scanBtn').onclick=startScan;$('refreshLights').onclick=refreshLights;$('saveProfile').onclick=saveProfile;$('applyCurrent').onclick=()=>applyProfile(($('profname').value||'').trim());$('intUp').onclick=()=>intensityDelta(50);$('intDown').onclick=()=>intensityDelta(-50);$('saveSchedule').onclick=saveSchedule;$('newSchedule').onclick=clearScheduleForm;$('refreshSchedules').onclick=refreshSchedules;$('saveTime').onclick=saveTimeConfig;$('saveSun').onclick=saveSunConfig;$('saveWifi').onclick=saveWifiConfig;$('saveModbus').onclick=saveModbusConfig;$('saveMqtt').onclick=saveMqttConfig;"
+"$('scanBtn').onclick=startScan;$('refreshLights').onclick=refreshLights;$('refreshPumps').onclick=refreshPumps;$('applyPump').onclick=()=>pumpCommand($('pumpTarget').value,pumpCommandBody());$('feedPump').onclick=()=>pumpCommand($('pumpTarget').value,{mode:13,speed_percent:10,timeout:60});$('offPump').onclick=()=>pumpCommand($('pumpTarget').value,{mode:1,speed_percent:0,timeout:60});$('saveProfile').onclick=saveProfile;$('applyCurrent').onclick=()=>applyProfile(($('profname').value||'').trim());$('intUp').onclick=()=>intensityDelta(50);$('intDown').onclick=()=>intensityDelta(-50);$('saveSchedule').onclick=saveSchedule;$('newSchedule').onclick=clearScheduleForm;$('refreshSchedules').onclick=refreshSchedules;$('savePumpSchedule').onclick=savePumpSchedule;$('newPumpSchedule').onclick=clearPumpScheduleForm;$('refreshPumpSchedules').onclick=refreshPumpSchedules;$('saveTime').onclick=saveTimeConfig;$('saveSun').onclick=saveSunConfig;$('saveWifi').onclick=saveWifiConfig;$('saveModbus').onclick=saveModbusConfig;$('saveMqtt').onclick=saveMqttConfig;"
 "$('refreshGroups').onclick=refreshGroups;$('saveGroup').onclick=saveGroup;document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));document.querySelectorAll('.tabpane').forEach(x=>x.classList.remove('active'));b.classList.add('active');$('tab-'+b.dataset.tab).classList.add('active');});"
-"buildChannels();clearScheduleForm();refreshStatus();refreshLights();refreshGroups();refreshProfiles();refreshSchedules();refreshTimeConfig();refreshSunConfig();refreshWifiConfig();refreshModbusConfig();refreshMqttConfig();setInterval(refreshStatus,3000);setInterval(refreshProfiles,10000);setInterval(refreshSchedules,10000);setInterval(refreshTimeConfig,10000);setInterval(refreshSunConfig,10000);setInterval(refreshWifiConfig,10000);setInterval(refreshModbusConfig,10000);setInterval(refreshMqttConfig,10000);"
+"buildChannels();clearScheduleForm();clearPumpScheduleForm();refreshStatus();refreshLights();refreshPumps();refreshGroups();refreshProfiles();refreshSchedules();refreshPumpSchedules();refreshTimeConfig();refreshSunConfig();refreshWifiConfig();refreshModbusConfig();refreshMqttConfig();setInterval(refreshStatus,3000);setInterval(refreshProfiles,10000);setInterval(refreshSchedules,10000);setInterval(refreshPumpSchedules,10000);setInterval(refreshTimeConfig,10000);setInterval(refreshSunConfig,10000);setInterval(refreshWifiConfig,10000);setInterval(refreshModbusConfig,10000);setInterval(refreshMqttConfig,10000);"
 "</script></body></html>";
 
 static esp_err_t get_root(httpd_req_t *req)
@@ -311,15 +339,18 @@ static esp_err_t get_status(httpd_req_t *req)
     time_service_status_t ts;
     sun_service_status_t sun;
     schedule_engine_status_t sched;
+    pump_schedule_engine_status_t pump_sched;
     time_service_get_status(&ts);
     sun_service_get_status(&sun);
     schedule_engine_get_status(&sched);
+    pump_schedule_engine_get_status(&pump_sched);
 
-    char buf[1024];
+    char buf[1280];
     snprintf(buf, sizeof buf,
         "{\"controller_ready\":true,"
         "\"registered_lights\":%u,"
         "\"registered_groups\":%u,"
+        "\"registered_pumps\":%u,"
         "\"ble_state\":%d,"
         "\"uptime_ms\":%lu,"
         "\"time_synced\":%s,"
@@ -328,9 +359,11 @@ static esp_err_t get_status(httpd_req_t *req)
         "\"last_time_sync_epoch\":%lld,"
         "\"sunrise_local\":\"%s\","
         "\"sunset_local\":\"%s\","
-        "\"next_schedule_action\":\"%s\"}",
+        "\"next_schedule_action\":\"%s\","
+        "\"next_pump_schedule_action\":\"%s\"}",
         (unsigned)light_registry_count(),
         (unsigned)group_registry_count(),
+        (unsigned)pump_registry_count(),
         (int)ble_light_client_current_state(),
         (unsigned long)esp_log_timestamp(),
         ts.synced ? "true" : "false",
@@ -339,13 +372,36 @@ static esp_err_t get_status(httpd_req_t *req)
         (long long)ts.last_sync_epoch,
         sun.sunrise_local,
         sun.sunset_local,
-        sched.next_action);
+        sched.next_action,
+        pump_sched.next_action);
     return send_json(req, buf);
 }
 
 /* ===== scan ===== */
 
 static bool build_hydra_light_from_result(const ble_scan_result_t *r, registered_light_t *out);
+static bool looks_like_hydra(const ble_scan_result_t *r);
+
+static bool looks_like_orbit_pump(const ble_scan_result_t *r)
+{
+    if (!r) return false;
+    if (r->manuf.model == 259 || r->manuf.model == 260) return true;
+    if (strstr(r->name, "Orbit")) return true;
+    return false;
+}
+
+static bool has_known_non_hydra_model(const ble_scan_result_t *r)
+{
+    if (!r || !r->has_manuf_data || r->manuf.model == 0) return false;
+    return !ble_scanner_is_ai_model(r->manuf.model) &&
+           r->manuf.model != 259 &&
+           r->manuf.model != 260;
+}
+
+static bool looks_like_supported_scan_result(const ble_scan_result_t *r)
+{
+    return looks_like_orbit_pump(r) || looks_like_hydra(r);
+}
 
 static void scan_cb(const ble_scan_result_t *result, void *user_ctx)
 {
@@ -374,13 +430,8 @@ static void scan_cb(const ble_scan_result_t *result, void *user_ctx)
         }
     }
 
-    /* For user discovery scan (30s, max 16 results): be extremely permissive.
-     * Show ANY BLE device seen so that lights in weird pairing mode (no standard name,
-     * no parsable 0xFF, no service UUID in adv) still appear by their addr/rssi.
-     * User picks the right one (strong RSSI, known addr) and clicks Add.
-     * (Normal non-pairing lights will have name/MOBIUS/manuf anyway.) */
-    // no looks_like filter - accept all
-    // (dedup and max still apply)
+    if (!looks_like_supported_scan_result(result)) return;
+
     for (size_t i = 0; i < s_scan_count; ++i) {
         if (memcmp(s_scan_buf[i].ble_addr, result->ble_addr, BLE_ADDR_BYTES) == 0) {
             merge_scan_result(&s_scan_buf[i], result);
@@ -417,12 +468,13 @@ static esp_err_t post_scan(httpd_req_t *req)
 static bool looks_like_hydra(const ble_scan_result_t *r)
 {
     if (!r) return false;
-    if (r->has_hydra_service) return true;
+    if (looks_like_orbit_pump(r)) return false;
+    if (has_known_non_hydra_model(r)) return false;
     if (r->has_manuf_data) {
-        if (r->manuf.version == 1 || r->manuf.version == 2) return true;
         if (ble_scanner_is_ai_model(r->manuf.model)) return true;
     }
-    if (strstr(r->name, "MOBIUS") || strstr(r->name, "Hydra")) return true;
+    if (strstr(r->name, "Hydra")) return true;
+    if (r->has_hydra_service && (!r->has_manuf_data || strstr(r->name, "MOBIUS"))) return true;
     return false;
 }
 
@@ -504,12 +556,14 @@ static esp_err_t get_scan_results(httpd_req_t *req)
         const ble_scan_result_t *r = &s_scan_buf[i];
         char addr[24];
         hydra_ble_addr_format(r->ble_addr, addr, sizeof addr);
+        const char *device_type = looks_like_orbit_pump(r) ? "pump" : (looks_like_hydra(r) ? "light" : "unknown");
         off += snprintf(buf + off, sizeof buf - off,
             "%s{\"name\":\"%s\",\"ble_addr\":\"%s\",\"ble_addr_type\":%d,\"rssi\":%d,"
-            "\"model\":%u,\"serial\":\"%s\"}",
+            "\"model\":%u,\"serial\":\"%s\",\"device_type\":\"%s\",\"supported\":%s}",
             i == 0 ? "" : ",",
             r->name, addr, (int)r->ble_addr_type, r->rssi,
-            (unsigned)r->manuf.model, r->manuf.serial);
+            (unsigned)r->manuf.model, r->manuf.serial, device_type,
+            strcmp(device_type, "unknown") == 0 ? "false" : "true");
     }
     snprintf(buf + off, sizeof buf - off, "]}");
     return send_json(req, buf);
@@ -597,6 +651,49 @@ static int json_get_bool(const char *json, const char *key, bool *out)
         return 0;
     }
     return -1;
+}
+
+static int hex_nibble(char c)
+{
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+    return -1;
+}
+
+static int parse_hex8(const char *text, uint8_t out[8])
+{
+    if (!text || !out) return -1;
+    size_t n = strlen(text);
+    if (n != 16) return -1;
+    for (size_t i = 0; i < 8; ++i) {
+        int hi = hex_nibble(text[i * 2]);
+        int lo = hex_nibble(text[i * 2 + 1]);
+        if (hi < 0 || lo < 0) return -1;
+        out[i] = (uint8_t)((hi << 4) | lo);
+    }
+    return 0;
+}
+
+static bool pump_mode_ui_supported(uint8_t mode)
+{
+    return mode == CONFIG_PUMP_MODE_CONSTANT ||
+           mode == CONFIG_PUMP_MODE_RANDOM ||
+           mode == CONFIG_PUMP_MODE_PULSE ||
+           mode == CONFIG_PUMP_MODE_FEED;
+}
+
+static bool pump_command_values_ok(const pending_command_t *cmd)
+{
+    if (!cmd) return false;
+    if (cmd->pump_speed_percent > 100 ||
+        cmd->pump_min_speed_percent > 100 ||
+        cmd->pump_variance_percent > 100) return false;
+    if (!ai_pump_mode_is_supported(cmd->pump_mode)) return false;
+    if (cmd->pump_mode == CONFIG_PUMP_MODE_SYNC && !cmd->pump_has_master) return false;
+    if (cmd->pump_mode == CONFIG_PUMP_MODE_PULSE &&
+        (cmd->pump_on_time_ms == 0 || cmd->pump_off_time_ms == 0)) return false;
+    return true;
 }
 
 static int json_get_double_scaled_e7(const char *json, const char *key, int32_t *out)
@@ -754,6 +851,256 @@ static esp_err_t delete_light(httpd_req_t *req)
     light_registry_save();
     char out[96];
     snprintf(out, sizeof out, "{\"removed\":true,\"light_id\":\"%s\"}", light_id);
+    return send_json(req, out);
+}
+
+/* ===== pumps ===== */
+
+static esp_err_t get_pumps(httpd_req_t *req)
+{
+    char buf[1536];
+    size_t off = 0;
+    off += snprintf(buf + off, sizeof buf - off, "{\"pumps\":[");
+    size_t n = pump_registry_count();
+    for (size_t i = 0; i < n && off < sizeof buf - 240; ++i) {
+        const registered_pump_t *p = pump_registry_at(i);
+        if (!p) continue;
+        off += snprintf(buf + off, sizeof buf - off,
+            "%s{\"pump_id\":\"%s\",\"display_name\":\"%s\","
+            "\"serial\":\"%s\",\"model\":%u,\"enabled\":%s,"
+            "\"last_seen_rssi\":%d,\"last_mode\":%u,"
+            "\"last_speed_percent\":%u,\"protocol_status\":%u}",
+            i == 0 ? "" : ",",
+            p->pump_id, p->display_name, p->serial,
+            (unsigned)p->model,
+            p->enabled ? "true" : "false",
+            p->last_seen_rssi,
+            (unsigned)p->last_mode,
+            (unsigned)p->last_speed_percent,
+            (unsigned)p->protocol_status);
+    }
+    snprintf(buf + off, sizeof buf - off, "]}");
+    return send_json(req, buf);
+}
+
+static esp_err_t post_pumps(httpd_req_t *req)
+{
+    char body[512];
+    int total = 0;
+    while (total < (int)sizeof body - 1) {
+        int got = httpd_req_recv(req, body + total, sizeof body - 1 - total);
+        if (got <= 0) break;
+        total += got;
+    }
+    body[total < 0 ? 0 : total] = '\0';
+
+    registered_pump_t p;
+    memset(&p, 0, sizeof p);
+    char addr_str[24] = {0};
+    int model = 0;
+
+    if (json_get_str(body, "pump_id", p.pump_id, sizeof p.pump_id) != 0 ||
+        json_get_str(body, "display_name", p.display_name, sizeof p.display_name) != 0 ||
+        json_get_str(body, "ble_addr", addr_str, sizeof addr_str) != 0 ||
+        json_get_str(body, "serial", p.serial, sizeof p.serial) != 0) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "missing fields");
+        return ESP_FAIL;
+    }
+    json_get_int(body, "model", &model);
+    p.model = (uint16_t)model;
+    p.enabled = true;
+    p.last_mode = PUMP_MODE_CONSTANT;
+    p.last_speed_percent = 0;
+    p.protocol_status = PUMP_PROTOCOL_EXPERIMENTAL_MOBIUS;
+    int addr_type = BLE_ADDR_PUBLIC;
+    json_get_int(body, "ble_addr_type", &addr_type);
+    if (addr_type == BLE_ADDR_RANDOM) {
+        p.ble_addr_type = BLE_ADDR_RANDOM;
+    } else if (addr_type == BLE_ADDR_PUBLIC_ID) {
+        p.ble_addr_type = BLE_ADDR_PUBLIC_ID;
+    } else if (addr_type == BLE_ADDR_RANDOM_ID) {
+        p.ble_addr_type = BLE_ADDR_RANDOM_ID;
+    } else {
+        p.ble_addr_type = BLE_ADDR_PUBLIC;
+    }
+    if (hydra_ble_addr_parse(addr_str, p.ble_addr) != 0) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "bad ble_addr");
+        return ESP_FAIL;
+    }
+
+    int rc = pump_registry_add(&p);
+    if (rc != 0) {
+        const registered_pump_t *existing = pump_registry_get(p.pump_id);
+        if (!existing) {
+            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "duplicate or full");
+            return ESP_FAIL;
+        }
+        if (pump_registry_update_discovery(existing->pump_id, p.ble_addr,
+                                           p.ble_addr_type, p.last_seen_rssi) != 0) {
+            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "update failed");
+            return ESP_FAIL;
+        }
+    }
+    pump_registry_save();
+
+    char out[160];
+    snprintf(out, sizeof out, "{\"added\":%s,\"pump_id\":\"%s\",\"experimental\":true}",
+             rc == 0 ? "true" : "false", p.pump_id);
+    return send_json(req, out);
+}
+
+static esp_err_t delete_pump(httpd_req_t *req)
+{
+    const char *p = strstr(req->uri, "/api/pumps/");
+    if (!p) { httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "bad uri"); return ESP_FAIL; }
+    p += strlen("/api/pumps/");
+    char pump_id[PUMP_ID_LEN];
+    size_t i = 0;
+    while (p[i] && p[i] != '/' && i + 1 < PUMP_ID_LEN) { pump_id[i] = p[i]; ++i; }
+    pump_id[i] = '\0';
+    if (i == 0) { httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "missing pump_id"); return ESP_FAIL; }
+
+    if (pump_registry_remove(pump_id) != 0) {
+        httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "not found");
+        return ESP_FAIL;
+    }
+    pump_registry_save();
+    char out[96];
+    snprintf(out, sizeof out, "{\"removed\":true,\"pump_id\":\"%s\"}", pump_id);
+    return send_json(req, out);
+}
+
+static esp_err_t post_pump_command(httpd_req_t *req)
+{
+    const char *p = strstr(req->uri, "/api/pumps/");
+    if (!p) { httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "bad uri"); return ESP_FAIL; }
+    p += strlen("/api/pumps/");
+    const char *slash = strchr(p, '/');
+    if (!slash) { httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "missing pump_id"); return ESP_FAIL; }
+    char pump_id[PUMP_ID_LEN];
+    size_t id_len = slash - p;
+    if (id_len >= PUMP_ID_LEN) id_len = PUMP_ID_LEN - 1;
+    memcpy(pump_id, p, id_len);
+    pump_id[id_len] = '\0';
+
+    char body[512];
+    int total = 0;
+    while (total < (int)sizeof body - 1) {
+        int got = httpd_req_recv(req, body + total, sizeof body - 1 - total);
+        if (got <= 0) break;
+        total += got;
+    }
+    body[total < 0 ? 0 : total] = '\0';
+
+    if (strcmp(slash, "/rename") == 0) {
+        char display_name[PUMP_NAME_LEN];
+        if (json_get_str(body, "display_name", display_name, sizeof display_name) != 0) {
+            httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "missing display_name");
+            return ESP_FAIL;
+        }
+        if (!safe_display_name(display_name)) {
+            httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "bad display_name");
+            return ESP_FAIL;
+        }
+        if (pump_registry_rename(pump_id, display_name) != 0) {
+            httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "rename failed");
+            return ESP_FAIL;
+        }
+        pump_registry_save();
+        const registered_pump_t *pump = pump_registry_get(pump_id);
+        char out[128];
+        snprintf(out, sizeof out,
+                 "{\"renamed\":true,\"pump_id\":\"%s\",\"display_name\":\"%s\"}",
+                 pump_id, pump ? pump->display_name : display_name);
+        return send_json(req, out);
+    }
+
+    if (strcmp(slash, "/command") != 0) {
+        httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "unknown pump subpath");
+        return ESP_FAIL;
+    }
+
+    const registered_pump_t *pump = pump_registry_get(pump_id);
+    if (!pump || !pump->enabled) {
+        httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "pump not found");
+        return ESP_FAIL;
+    }
+    int mode = CONFIG_PUMP_MODE_CONSTANT;
+    int speed = 0;
+    int min_speed = 0;
+    int variance = 0;
+    int on_ms = 1000;
+    int off_ms = 1000;
+    int pulse_ms = 1000;
+    int start_ms = 1000;
+    int end_ms = 1000;
+    int phase = 0;
+    int timeout = 60;
+    json_get_int(body, "mode", &mode);
+    json_get_int(body, "speed_percent", &speed);
+    json_get_int(body, "min_speed_percent", &min_speed);
+    json_get_int(body, "variance_percent", &variance);
+    json_get_int(body, "on_time_ms", &on_ms);
+    json_get_int(body, "off_time_ms", &off_ms);
+    json_get_int(body, "pulse_time_ms", &pulse_ms);
+    json_get_int(body, "start_time_ms", &start_ms);
+    json_get_int(body, "end_time_ms", &end_ms);
+    json_get_int(body, "phase_shift_deg", &phase);
+    json_get_int(body, "timeout", &timeout);
+    if (speed < 0 || speed > 100 ||
+        min_speed < 0 || min_speed > 100 ||
+        variance < 0 || variance > 100 ||
+        on_ms < 0 || off_ms < 0 || pulse_ms < 0 ||
+        start_ms < 0 || start_ms > 65535 ||
+        end_ms < 0 || end_ms > 65535 ||
+        phase < 0 || phase > 65535 ||
+        timeout < 0 || timeout > 3600) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "bad pump command");
+        return ESP_FAIL;
+    }
+
+    pending_command_t cmd;
+    memset(&cmd, 0, sizeof cmd);
+    snprintf(cmd.command_id, sizeof cmd.command_id, "web-pump-%lu", (unsigned long)esp_log_timestamp());
+    cmd.source = CMD_SOURCE_WEB;
+    cmd.type = CMD_TYPE_PUMP_SET;
+    cmd.device_type = CMD_DEVICE_PUMP;
+    strncpy(cmd.light_id, pump_id, sizeof cmd.light_id - 1);
+    cmd.timeout_ms = 30000;
+    cmd.scene_timeout_sec = (uint16_t)timeout;
+    cmd.pump_mode = (uint8_t)mode;
+    cmd.pump_speed_percent = (uint8_t)speed;
+    cmd.pump_min_speed_percent = (uint8_t)min_speed;
+    cmd.pump_variance_percent = (uint8_t)variance;
+    cmd.pump_on_time_ms = (uint32_t)on_ms;
+    cmd.pump_off_time_ms = (uint32_t)off_ms;
+    cmd.pump_pulse_time_ms = (uint32_t)pulse_ms;
+    cmd.pump_start_time_ms = (uint16_t)start_ms;
+    cmd.pump_end_time_ms = (uint16_t)end_ms;
+    cmd.pump_phase_shift_deg = (uint16_t)phase;
+
+    char master_hex[24] = {0};
+    if (json_get_str(body, "master_hex", master_hex, sizeof master_hex) == 0) {
+        if (parse_hex8(master_hex, cmd.pump_master) != 0) {
+            httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "bad master_hex");
+            return ESP_FAIL;
+        }
+        cmd.pump_has_master = true;
+    }
+
+    if (!pump_command_values_ok(&cmd)) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "bad pump command");
+        return ESP_FAIL;
+    }
+    if (cmd_queue_push(&cmd) != 0) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "pump queue full");
+        return ESP_FAIL;
+    }
+
+    char out[160];
+    snprintf(out, sizeof out,
+             "{\"command_id\":\"%s\",\"queued\":true,\"experimental\":true}",
+             cmd.command_id);
     return send_json(req, out);
 }
 
@@ -1399,6 +1746,7 @@ static esp_err_t post_sun_config(httpd_req_t *req)
     }
     esp_err_t err = sun_service_reconfigure();
     if (err == ESP_OK) err = schedule_engine_reconfigure();
+    if (err == ESP_OK) err = pump_schedule_engine_reconfigure();
     if (err != ESP_OK) {
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "reconfigure failed");
         return ESP_FAIL;
@@ -1445,7 +1793,7 @@ static esp_err_t get_schedules(httpd_req_t *req)
     httpd_resp_set_type(req, "application/json");
     httpd_resp_set_hdr(req, "Cache-Control", "no-store");
 
-    char chunk[512];
+    char chunk[768];
     snprintf(chunk, sizeof chunk,
         "{\"running\":%s,\"next_action\":\"%s\",\"schedules\":[",
         st.running ? "true" : "false", st.next_action);
@@ -1627,6 +1975,254 @@ static esp_err_t delete_schedule(httpd_req_t *req)
         return ESP_FAIL;
     }
     schedule_engine_reconfigure();
+    char out[96];
+    snprintf(out, sizeof out, "{\"deleted\":true,\"schedule_id\":\"%s\"}", id);
+    return send_json(req, out);
+}
+
+/* ===== pump schedules ===== */
+
+static void make_pump_schedule_id(const config_pump_schedules_t *cfg, char out[CONFIG_SCHEDULE_ID_LEN])
+{
+    for (unsigned n = 1; n < 1000; ++n) {
+        char candidate[CONFIG_SCHEDULE_ID_LEN];
+        snprintf(candidate, sizeof candidate, "psch-%u", n);
+        bool used = false;
+        if (cfg) {
+            for (uint8_t i = 0; i < cfg->count; ++i) {
+                if (strcmp(cfg->schedules[i].schedule_id, candidate) == 0) {
+                    used = true;
+                    break;
+                }
+            }
+        }
+        if (!used) {
+            strncpy(out, candidate, CONFIG_SCHEDULE_ID_LEN - 1);
+            out[CONFIG_SCHEDULE_ID_LEN - 1] = '\0';
+            return;
+        }
+    }
+    strncpy(out, "psch-new", CONFIG_SCHEDULE_ID_LEN - 1);
+    out[CONFIG_SCHEDULE_ID_LEN - 1] = '\0';
+}
+
+static esp_err_t get_pump_schedules(httpd_req_t *req)
+{
+    config_pump_schedules_t cfg;
+    config_store_load_pump_schedules(&cfg);
+    pump_schedule_engine_status_t st;
+    pump_schedule_engine_get_status(&st);
+
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+
+    char chunk[512];
+    snprintf(chunk, sizeof chunk,
+        "{\"running\":%s,\"next_action\":\"%s\",\"schedules\":[",
+        st.running ? "true" : "false", st.next_action);
+    if (httpd_resp_send_chunk(req, chunk, HTTPD_RESP_USE_STRLEN) != ESP_OK) return ESP_FAIL;
+
+    for (uint8_t i = 0; i < cfg.count; ++i) {
+        const config_pump_schedule_t *s = &cfg.schedules[i];
+        snprintf(chunk, sizeof chunk,
+            "%s{\"enabled\":%s,\"schedule_id\":\"%s\",\"name\":\"%s\","
+            "\"target_id\":\"%s\",\"active_mode\":%u,\"active_speed_percent\":%u,"
+            "\"active_min_speed_percent\":%u,\"active_variance_percent\":%u,"
+            "\"active_on_time_ms\":%u,\"active_off_time_ms\":%u,"
+            "\"end_mode\":%u,\"end_speed_percent\":%u,"
+            "\"end_min_speed_percent\":%u,\"end_variance_percent\":%u,"
+            "\"end_on_time_ms\":%u,\"end_off_time_ms\":%u,"
+            "\"start_trigger\":%u,\"end_trigger\":%u,"
+            "\"start_minute\":%u,\"end_minute\":%u,"
+            "\"start_offset_min\":%d,\"end_offset_min\":%d}",
+            i == 0 ? "" : ",",
+            s->enabled ? "true" : "false",
+            s->schedule_id,
+            s->name,
+            s->target_id,
+            (unsigned)s->active_mode,
+            (unsigned)s->active_speed_percent,
+            (unsigned)s->active_min_speed_percent,
+            (unsigned)s->active_variance_percent,
+            (unsigned)s->active_on_time_ms,
+            (unsigned)s->active_off_time_ms,
+            (unsigned)s->end_mode,
+            (unsigned)s->end_speed_percent,
+            (unsigned)s->end_min_speed_percent,
+            (unsigned)s->end_variance_percent,
+            (unsigned)s->end_on_time_ms,
+            (unsigned)s->end_off_time_ms,
+            (unsigned)s->start_trigger,
+            (unsigned)s->end_trigger,
+            (unsigned)s->start_minute,
+            (unsigned)s->end_minute,
+            (int)s->start_offset_min,
+            (int)s->end_offset_min);
+        if (httpd_resp_send_chunk(req, chunk, HTTPD_RESP_USE_STRLEN) != ESP_OK) return ESP_FAIL;
+    }
+    if (httpd_resp_send_chunk(req, "]}", HTTPD_RESP_USE_STRLEN) != ESP_OK) return ESP_FAIL;
+    return httpd_resp_send_chunk(req, NULL, 0);
+}
+
+static esp_err_t post_pump_schedule(httpd_req_t *req)
+{
+    char body[1024];
+    int total = 0;
+    while (total < (int)sizeof body - 1) {
+        int got = httpd_req_recv(req, body + total, sizeof body - 1 - total);
+        if (got <= 0) break;
+        total += got;
+    }
+    body[total < 0 ? 0 : total] = '\0';
+
+    config_pump_schedules_t cfg;
+    config_store_load_pump_schedules(&cfg);
+
+    char id[CONFIG_SCHEDULE_ID_LEN] = {0};
+    json_get_str(body, "schedule_id", id, sizeof id);
+    int idx = -1;
+    if (id[0]) {
+        for (uint8_t i = 0; i < cfg.count; ++i) {
+            if (strcmp(cfg.schedules[i].schedule_id, id) == 0) {
+                idx = (int)i;
+                break;
+            }
+        }
+    }
+    if (idx < 0) {
+        if (cfg.count >= MAX_PUMP_SCHEDULES) {
+            httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "too many pump schedules");
+            return ESP_FAIL;
+        }
+        idx = cfg.count++;
+        memset(&cfg.schedules[idx], 0, sizeof cfg.schedules[idx]);
+        if (id[0]) {
+            strncpy(cfg.schedules[idx].schedule_id, id, sizeof cfg.schedules[idx].schedule_id - 1);
+        } else {
+            make_pump_schedule_id(&cfg, cfg.schedules[idx].schedule_id);
+        }
+        cfg.schedules[idx].enabled = true;
+        cfg.schedules[idx].active_mode = CONFIG_PUMP_MODE_CONSTANT;
+        cfg.schedules[idx].active_speed_percent = 40;
+        cfg.schedules[idx].active_min_speed_percent = 20;
+        cfg.schedules[idx].active_variance_percent = 50;
+        cfg.schedules[idx].active_on_time_ms = 1000;
+        cfg.schedules[idx].active_off_time_ms = 1000;
+        cfg.schedules[idx].end_mode = CONFIG_PUMP_MODE_CONSTANT;
+        cfg.schedules[idx].end_speed_percent = 20;
+        cfg.schedules[idx].end_min_speed_percent = 10;
+        cfg.schedules[idx].end_variance_percent = 50;
+        cfg.schedules[idx].end_on_time_ms = 1000;
+        cfg.schedules[idx].end_off_time_ms = 1000;
+        cfg.schedules[idx].end_minute = 18 * 60;
+    }
+
+    config_pump_schedule_t *s = &cfg.schedules[idx];
+    bool b = false;
+    if (json_get_bool(body, "enabled", &b) == 0) s->enabled = b;
+    char txt[CONFIG_PROFILE_DESC_LEN];
+    if (json_get_str(body, "name", txt, sizeof txt) == 0) {
+        strncpy(s->name, txt, sizeof s->name - 1);
+        s->name[sizeof s->name - 1] = '\0';
+    }
+    if (json_get_str(body, "target_id", txt, sizeof txt) == 0) {
+        strncpy(s->target_id, txt, sizeof s->target_id - 1);
+        s->target_id[sizeof s->target_id - 1] = '\0';
+    }
+    int v = 0;
+    if (json_get_int(body, "active_mode", &v) == 0) s->active_mode = (uint8_t)v;
+    if (json_get_int(body, "active_speed_percent", &v) == 0) s->active_speed_percent = (uint8_t)v;
+    if (json_get_int(body, "active_min_speed_percent", &v) == 0) s->active_min_speed_percent = (uint8_t)v;
+    if (json_get_int(body, "active_variance_percent", &v) == 0) s->active_variance_percent = (uint8_t)v;
+    if (json_get_int(body, "active_on_time_ms", &v) == 0) s->active_on_time_ms = (uint16_t)v;
+    if (json_get_int(body, "active_off_time_ms", &v) == 0) s->active_off_time_ms = (uint16_t)v;
+    if (json_get_int(body, "end_mode", &v) == 0) s->end_mode = (uint8_t)v;
+    if (json_get_int(body, "end_speed_percent", &v) == 0) s->end_speed_percent = (uint8_t)v;
+    if (json_get_int(body, "end_min_speed_percent", &v) == 0) s->end_min_speed_percent = (uint8_t)v;
+    if (json_get_int(body, "end_variance_percent", &v) == 0) s->end_variance_percent = (uint8_t)v;
+    if (json_get_int(body, "end_on_time_ms", &v) == 0) s->end_on_time_ms = (uint16_t)v;
+    if (json_get_int(body, "end_off_time_ms", &v) == 0) s->end_off_time_ms = (uint16_t)v;
+    if (json_get_int(body, "start_trigger", &v) == 0) s->start_trigger = (uint8_t)v;
+    if (json_get_int(body, "end_trigger", &v) == 0) s->end_trigger = (uint8_t)v;
+    if (json_get_int(body, "start_minute", &v) == 0) s->start_minute = (uint16_t)v;
+    if (json_get_int(body, "end_minute", &v) == 0) s->end_minute = (uint16_t)v;
+    if (json_get_int(body, "start_offset_min", &v) == 0) s->start_offset_min = (int16_t)v;
+    if (json_get_int(body, "end_offset_min", &v) == 0) s->end_offset_min = (int16_t)v;
+
+    if (!s->name[0]) strncpy(s->name, "Pump Schedule", sizeof s->name - 1);
+    if (!schedule_text_ok(s->schedule_id, false) ||
+        !schedule_text_ok(s->name, false) ||
+        !schedule_text_ok(s->target_id, false)) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "bad pump schedule text");
+        return ESP_FAIL;
+    }
+    if (!pump_mode_ui_supported(s->active_mode) ||
+        !pump_mode_ui_supported(s->end_mode) ||
+        s->active_speed_percent > 100 || s->end_speed_percent > 100 ||
+        s->active_min_speed_percent > 100 || s->end_min_speed_percent > 100 ||
+        s->active_variance_percent > 100 || s->end_variance_percent > 100 ||
+        s->active_on_time_ms == 0 || s->active_on_time_ms > 60000 ||
+        s->active_off_time_ms == 0 || s->active_off_time_ms > 60000 ||
+        s->end_on_time_ms == 0 || s->end_on_time_ms > 60000 ||
+        s->end_off_time_ms == 0 || s->end_off_time_ms > 60000 ||
+        s->start_trigger > CONFIG_SCHEDULE_TRIGGER_SUNSET ||
+        s->end_trigger > CONFIG_SCHEDULE_TRIGGER_SUNSET ||
+        s->start_minute > 1439 || s->end_minute > 1439 ||
+        s->start_offset_min < -720 || s->start_offset_min > 720 ||
+        s->end_offset_min < -720 || s->end_offset_min > 720) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "pump schedule value out of range");
+        return ESP_FAIL;
+    }
+    if (!pump_registry_get(s->target_id)) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "pump target not found");
+        return ESP_FAIL;
+    }
+
+    if (config_store_save_pump_schedules(&cfg) != ESP_OK) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "save failed");
+        return ESP_FAIL;
+    }
+    esp_err_t err = pump_schedule_engine_reconfigure();
+    if (err != ESP_OK) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "reconfigure failed");
+        return ESP_FAIL;
+    }
+    char out[128];
+    snprintf(out, sizeof out, "{\"saved\":true,\"schedule_id\":\"%s\"}", s->schedule_id);
+    return send_json(req, out);
+}
+
+static esp_err_t delete_pump_schedule(httpd_req_t *req)
+{
+    const char *p = strstr(req->uri, "/api/pump-schedules/");
+    if (!p) { httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "bad uri"); return ESP_FAIL; }
+    p += strlen("/api/pump-schedules/");
+    char id[CONFIG_SCHEDULE_ID_LEN];
+    size_t i = 0;
+    while (p[i] && p[i] != '/' && i + 1 < sizeof id) { id[i] = p[i]; ++i; }
+    id[i] = '\0';
+    if (!id[0]) { httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "missing schedule_id"); return ESP_FAIL; }
+
+    config_pump_schedules_t cfg;
+    config_store_load_pump_schedules(&cfg);
+    int found = -1;
+    for (uint8_t k = 0; k < cfg.count; ++k) {
+        if (strcmp(cfg.schedules[k].schedule_id, id) == 0) { found = (int)k; break; }
+    }
+    if (found < 0) {
+        httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "pump schedule not found");
+        return ESP_FAIL;
+    }
+    for (uint8_t k = (uint8_t)found; k + 1 < cfg.count; ++k) {
+        cfg.schedules[k] = cfg.schedules[k + 1];
+    }
+    --cfg.count;
+    memset(&cfg.schedules[cfg.count], 0, sizeof cfg.schedules[cfg.count]);
+    if (config_store_save_pump_schedules(&cfg) != ESP_OK) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "save failed");
+        return ESP_FAIL;
+    }
+    pump_schedule_engine_reconfigure();
     char out[96];
     snprintf(out, sizeof out, "{\"deleted\":true,\"schedule_id\":\"%s\"}", id);
     return send_json(req, out);
@@ -2017,6 +2613,10 @@ esp_err_t web_ui_init(void)
     static const httpd_uri_t r_lights_post   = { .uri = "/api/lights",           .method = HTTP_POST, .handler = post_lights };
     static const httpd_uri_t r_light_cmd     = { .uri = "/api/lights/*",         .method = HTTP_POST, .handler = post_light_command };
     static const httpd_uri_t r_light_del     = { .uri = "/api/lights/*",         .method = HTTP_DELETE, .handler = delete_light };
+    static const httpd_uri_t r_pumps_get     = { .uri = "/api/pumps",            .method = HTTP_GET,  .handler = get_pumps };
+    static const httpd_uri_t r_pumps_post    = { .uri = "/api/pumps",            .method = HTTP_POST, .handler = post_pumps };
+    static const httpd_uri_t r_pump_cmd      = { .uri = "/api/pumps/*",          .method = HTTP_POST, .handler = post_pump_command };
+    static const httpd_uri_t r_pump_del      = { .uri = "/api/pumps/*",          .method = HTTP_DELETE, .handler = delete_pump };
     static const httpd_uri_t r_groups_get    = { .uri = "/api/groups",           .method = HTTP_GET,  .handler = get_groups };
     static const httpd_uri_t r_groups_post   = { .uri = "/api/groups",           .method = HTTP_POST, .handler = post_groups };
     static const httpd_uri_t r_group_cmd     = { .uri = "/api/groups/*",         .method = HTTP_POST, .handler = post_group_command };
@@ -2036,6 +2636,9 @@ esp_err_t web_ui_init(void)
     static const httpd_uri_t r_sched_get     = { .uri = "/api/schedules",        .method = HTTP_GET,  .handler = get_schedules };
     static const httpd_uri_t r_sched_post    = { .uri = "/api/schedules",        .method = HTTP_POST, .handler = post_schedule };
     static const httpd_uri_t r_sched_del     = { .uri = "/api/schedules/*",      .method = HTTP_DELETE, .handler = delete_schedule };
+    static const httpd_uri_t r_pump_sched_get  = { .uri = "/api/pump-schedules",   .method = HTTP_GET,  .handler = get_pump_schedules };
+    static const httpd_uri_t r_pump_sched_post = { .uri = "/api/pump-schedules",   .method = HTTP_POST, .handler = post_pump_schedule };
+    static const httpd_uri_t r_pump_sched_del  = { .uri = "/api/pump-schedules/*", .method = HTTP_DELETE, .handler = delete_pump_schedule };
     static const httpd_uri_t r_profiles_get  = { .uri = "/api/profiles",         .method = HTTP_GET,  .handler = get_profiles };
     static const httpd_uri_t r_profiles_post = { .uri = "/api/profiles",         .method = HTTP_POST, .handler = post_profile };
     static const httpd_uri_t r_profile_del   = { .uri = "/api/profiles/*",       .method = HTTP_DELETE, .handler = delete_profile };
@@ -2050,6 +2653,10 @@ esp_err_t web_ui_init(void)
     httpd_register_uri_handler(s_server, &r_lights_post);
     httpd_register_uri_handler(s_server, &r_light_cmd);
     httpd_register_uri_handler(s_server, &r_light_del);
+    httpd_register_uri_handler(s_server, &r_pumps_get);
+    httpd_register_uri_handler(s_server, &r_pumps_post);
+    httpd_register_uri_handler(s_server, &r_pump_cmd);
+    httpd_register_uri_handler(s_server, &r_pump_del);
     httpd_register_uri_handler(s_server, &r_groups_get);
     httpd_register_uri_handler(s_server, &r_groups_post);
     httpd_register_uri_handler(s_server, &r_group_cmd);
@@ -2069,6 +2676,9 @@ esp_err_t web_ui_init(void)
     httpd_register_uri_handler(s_server, &r_sched_get);
     httpd_register_uri_handler(s_server, &r_sched_post);
     httpd_register_uri_handler(s_server, &r_sched_del);
+    httpd_register_uri_handler(s_server, &r_pump_sched_get);
+    httpd_register_uri_handler(s_server, &r_pump_sched_post);
+    httpd_register_uri_handler(s_server, &r_pump_sched_del);
     httpd_register_uri_handler(s_server, &r_profiles_get);
     httpd_register_uri_handler(s_server, &r_profiles_post);
     httpd_register_uri_handler(s_server, &r_profile_del);

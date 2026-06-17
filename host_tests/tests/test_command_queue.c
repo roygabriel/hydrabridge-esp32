@@ -178,7 +178,7 @@ static void test_slot_reused_after_drain(void)
 {
     cmd_queue_reset();
     pending_command_t cmd;
-    for (int i = 0; i < LIGHT_REGISTRY_CAPACITY; ++i) {
+    for (int i = 0; i < CMD_QUEUE_MAX_TARGETS; ++i) {
         char light_id[16];
         snprintf(light_id, sizeof light_id, "L%d", i);
         make_cmd(&cmd, "x", light_id, CMD_TYPE_RAMP, 0);
