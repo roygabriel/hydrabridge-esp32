@@ -100,3 +100,9 @@ void config_defaults_schedules(config_schedules_t *out)
     if (!out) return;
     memset(out, 0, sizeof *out);
 }
+
+void config_defaults_pump_schedules(config_pump_schedules_t *out)
+{
+    if (!out) return;
+    memset(out, 0, sizeof *out);
+}

@@ -7,6 +7,7 @@
 
 #include "command_queue.h"
 #include "light_registry.h"
+#include "pump_registry.h"
 
 typedef enum {
     BLC_STATE_DISABLED        = 0,
@@ -45,6 +46,7 @@ esp_err_t ble_light_client_start(void);
 void ble_light_client_set_result_cb(blc_result_cb_t cb, void *user);
 blc_state_t ble_light_client_current_state(void);
 void try_connect_to(const registered_light_t *light, bool do_prime);
+void try_connect_to_pump(const registered_pump_t *pump, bool do_prime);
 #endif
 
 #endif /* HYDRA_BLE_LIGHT_CLIENT_H */

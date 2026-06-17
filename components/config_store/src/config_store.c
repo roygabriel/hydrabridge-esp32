@@ -1,5 +1,5 @@
 /* config_store: NVS-backed persistence for controller / modbus / wifi /
- * mqtt / time / sun / schedules / user color profiles. One namespace per
+ * mqtt / time / sun / schedules / pump schedules / user color profiles. One namespace per
  * category, one blob key "rec" per namespace. Each blob is prefixed with a
  * uint32_t schema_version
  * so layout changes invalidate stored data and we fall back to
@@ -32,6 +32,7 @@ static const char *TAG = "config_store";
 #define NS_TIME        "time_cfg"
 #define NS_SUN         "sun_cfg"
 #define NS_SCHEDULES   "sched_cfg"
+#define NS_PUMP_SCHEDULES "pump_sched"
 
 static bool s_reported_controller_fallback;
 static bool s_reported_modbus_fallback;
@@ -41,6 +42,7 @@ static bool s_reported_profiles_fallback;
 static bool s_reported_time_fallback;
 static bool s_reported_sun_fallback;
 static bool s_reported_schedules_fallback;
+static bool s_reported_pump_schedules_fallback;
 
 /* ---- blob helpers ---- */
 
@@ -137,7 +139,7 @@ static esp_err_t erase_namespace(const char *ns)
 
 esp_err_t config_store_init(void)
 {
-    ESP_LOGI(TAG, "init schema versions: ctrl=%u mb=%u wifi=%u mqtt=%u prof=%u time=%u sun=%u sched=%u",
+    ESP_LOGI(TAG, "init schema versions: ctrl=%u mb=%u wifi=%u mqtt=%u prof=%u time=%u sun=%u sched=%u pump_sched=%u",
              (unsigned)CONFIG_SCHEMA_CONTROLLER,
              (unsigned)CONFIG_SCHEMA_MODBUS,
              (unsigned)CONFIG_SCHEMA_WIFI,
@@ -145,7 +147,8 @@ esp_err_t config_store_init(void)
              (unsigned)CONFIG_SCHEMA_PROFILES,
              (unsigned)CONFIG_SCHEMA_TIME,
              (unsigned)CONFIG_SCHEMA_SUN,
-             (unsigned)CONFIG_SCHEMA_SCHEDULES);
+             (unsigned)CONFIG_SCHEMA_SCHEDULES,
+             (unsigned)CONFIG_SCHEMA_PUMP_SCHEDULES);
     return ESP_OK;
 }
 
@@ -317,6 +320,27 @@ esp_err_t config_store_save_schedules(const config_schedules_t *in)
     return save_blob(NS_SCHEDULES, CONFIG_SCHEMA_SCHEDULES, in, sizeof *in);
 }
 
+esp_err_t config_store_load_pump_schedules(config_pump_schedules_t *out)
+{
+    if (!out) return ESP_ERR_INVALID_ARG;
+    esp_err_t err = load_blob(NS_PUMP_SCHEDULES, CONFIG_SCHEMA_PUMP_SCHEDULES, out, sizeof *out);
+    if (err != ESP_OK) {
+        config_defaults_pump_schedules(out);
+        esp_err_t save_err = expected_default_err(err)
+            ? save_blob(NS_PUMP_SCHEDULES, CONFIG_SCHEMA_PUMP_SCHEDULES, out, sizeof *out)
+            : ESP_OK;
+        report_load_fallback("pump schedules", err, save_err, &s_reported_pump_schedules_fallback);
+        return ESP_OK;
+    }
+    return ESP_OK;
+}
+
+esp_err_t config_store_save_pump_schedules(const config_pump_schedules_t *in)
+{
+    if (!in) return ESP_ERR_INVALID_ARG;
+    return save_blob(NS_PUMP_SCHEDULES, CONFIG_SCHEMA_PUMP_SCHEDULES, in, sizeof *in);
+}
+
 esp_err_t config_store_factory_reset(void)
 {
     esp_err_t e1 = erase_namespace(NS_CONTROLLER);
@@ -327,6 +351,7 @@ esp_err_t config_store_factory_reset(void)
     esp_err_t e6 = erase_namespace(NS_TIME);
     esp_err_t e7 = erase_namespace(NS_SUN);
     esp_err_t e8 = erase_namespace(NS_SCHEDULES);
+    esp_err_t e9 = erase_namespace(NS_PUMP_SCHEDULES);
     if (e1 != ESP_OK) return e1;
     if (e2 != ESP_OK) return e2;
     if (e3 != ESP_OK) return e3;
@@ -334,5 +359,6 @@ esp_err_t config_store_factory_reset(void)
     if (e5 != ESP_OK) return e5;
     if (e6 != ESP_OK) return e6;
     if (e7 != ESP_OK) return e7;
-    return e8;
+    if (e8 != ESP_OK) return e8;
+    return e9;
 }

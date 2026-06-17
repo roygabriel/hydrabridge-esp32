@@ -11,6 +11,8 @@
 #include "modbus_interface.h"
 #include "mqtt_bridge.h"
 #include "ota_update.h"
+#include "pump_registry.h"
+#include "pump_schedule_engine.h"
 #include "schedule_engine.h"
 #include "sun_service.h"
 #include "time_service.h"
@@ -102,6 +104,7 @@ void app_main(void)
 
     ESP_ERROR_CHECK(config_store_init());
     ESP_ERROR_CHECK(light_registry_init());
+    ESP_ERROR_CHECK(pump_registry_init());
     ESP_ERROR_CHECK(command_engine_init());
 
 #ifndef HYDRA_DIAG_BLE_ONLY
@@ -125,6 +128,7 @@ void app_main(void)
     ESP_ERROR_CHECK(time_service_init());
     ESP_ERROR_CHECK(sun_service_init());
     ESP_ERROR_CHECK(schedule_engine_init());
+    ESP_ERROR_CHECK(pump_schedule_engine_init());
 
     ESP_ERROR_CHECK(web_ui_init());
 

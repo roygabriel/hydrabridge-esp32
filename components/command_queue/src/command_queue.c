@@ -19,7 +19,7 @@ typedef struct {
     bool              in_use;
 } per_light_queue_t;
 
-static per_light_queue_t g_queues[LIGHT_REGISTRY_CAPACITY];
+static per_light_queue_t g_queues[CMD_QUEUE_MAX_TARGETS];
 static uint64_t (*g_clock_fn)(void) = NULL;
 
 static uint64_t default_clock(void)
@@ -46,14 +46,14 @@ void cmd_queue_reset(void)
 static per_light_queue_t *find_queue(const char *light_id, bool create)
 {
     if (!light_id) return NULL;
-    for (size_t i = 0; i < LIGHT_REGISTRY_CAPACITY; ++i) {
+    for (size_t i = 0; i < CMD_QUEUE_MAX_TARGETS; ++i) {
         if (g_queues[i].in_use &&
             strncmp(g_queues[i].light_id, light_id, LIGHT_ID_LEN) == 0) {
             return &g_queues[i];
         }
     }
     if (!create) return NULL;
-    for (size_t i = 0; i < LIGHT_REGISTRY_CAPACITY; ++i) {
+    for (size_t i = 0; i < CMD_QUEUE_MAX_TARGETS; ++i) {
         if (!g_queues[i].in_use) {
             memset(&g_queues[i], 0, sizeof g_queues[i]);
             strncpy(g_queues[i].light_id, light_id, LIGHT_ID_LEN - 1);
@@ -78,10 +78,10 @@ int cmd_queue_push(const pending_command_t *cmd)
     per_light_queue_t *q = find_queue(cmd->light_id, true);
     if (!q) return -1;
 
-    if (cmd->type == CMD_TYPE_SET_CHANNELS) {
+    if (cmd->type == CMD_TYPE_SET_CHANNELS || cmd->type == CMD_TYPE_PUMP_SET) {
         for (uint8_t i = 0; i < q->count; ++i) {
             uint8_t slot = ring_idx(q->head, i);
-            if (q->entries[slot].type == CMD_TYPE_SET_CHANNELS) {
+            if (q->entries[slot].type == cmd->type) {
                 q->entries[slot] = *cmd;
                 q->entries[slot].enqueue_ms = now_ms();
                 return 0;
@@ -133,7 +133,7 @@ size_t cmd_queue_expire(void)
 {
     uint64_t t = now_ms();
     size_t dropped = 0;
-    for (size_t i = 0; i < LIGHT_REGISTRY_CAPACITY; ++i) {
+    for (size_t i = 0; i < CMD_QUEUE_MAX_TARGETS; ++i) {
         per_light_queue_t *q = &g_queues[i];
         if (!q->in_use) continue;
         while (q->count > 0) {
@@ -156,8 +156,8 @@ size_t cmd_queue_expire(void)
 esp_err_t cmd_queue_init(void)
 {
     cmd_queue_reset();
-    ESP_LOGI(TAG, "init (%d lights x %d depth)",
-             LIGHT_REGISTRY_CAPACITY, CMD_QUEUE_DEPTH);
+    ESP_LOGI(TAG, "init (%d targets x %d depth)",
+             CMD_QUEUE_MAX_TARGETS, CMD_QUEUE_DEPTH);
     return ESP_OK;
 }
 #endif
