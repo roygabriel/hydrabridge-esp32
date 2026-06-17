@@ -5,6 +5,7 @@ on:
     paths-ignore:
       - "README.md"
       - "docs/**"
+      - "scripts/**"
   workflow_dispatch:
   push:
     branches:
