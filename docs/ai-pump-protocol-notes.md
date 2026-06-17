@@ -2,7 +2,7 @@
 
 HydraBridge includes experimental local BLE support for AquaIllumination pumps that use the Mobius-style pump scene path, starting with Orbit-class devices.
 
-This implementation is an independently written interoperability layer. It does not contain vendor firmware, vendor application code, copyrighted assets, or cloud service integrations.
+This implementation is an independently written interoperability layer. It does not contain vendor firmware, vendor-owned code, copyrighted assets, or cloud service integrations.
 
 ## Current Scope
 
@@ -25,7 +25,7 @@ The web UI and schedule engine expose the Orbit-supported command modes:
 
 Speed is accepted as `0..100` percent and encoded as tenths of a percent in the pump primitive.
 
-The lower-level protocol builder also understands the Mobius pump mode IDs found during interoperability work:
+The lower-level protocol builder also includes these Mobius pump mode IDs:
 
 | Mode | Numeric value |
 |---|---:|

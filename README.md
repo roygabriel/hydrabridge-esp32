@@ -4,7 +4,7 @@
 
 HydraBridge ESP32 is an independent, open-source interoperability project. It is not affiliated with, endorsed by, sponsored by, or approved by AquaIllumination, Mobius®, or their owners.
 
-This project was reverse engineered using a clean-room method solely to enable local interoperability with the author's personally owned AquaIllumination Hydra® lights in a personal PLC reef controller. The repository is intended to contain independently written code, protocol documentation, and functional facts needed for interoperability only; it does not include vendor firmware, vendor source code, vendor application code, copyrighted artwork, cloud services, or product keys.
+This project was developed using a clean-room interoperability method solely to enable local control of the author's personally owned AquaIllumination Hydra® lights in a personal PLC reef controller. The repository is intended to contain independently written code, protocol documentation, and functional facts needed for interoperability only; it does not include vendor firmware, vendor-owned code, copyrighted artwork, cloud services, or product keys.
 
 Under U.S. law, this project is intended to rely on the interoperability reverse-engineering provisions of [17 U.S.C. § 1201(f)](https://www.law.cornell.edu/uscode/text/17/1201), which permit identifying, analyzing, and sharing information necessary for interoperability of independently created computer programs, and on fair-use principles under [17 U.S.C. § 107](https://www.law.cornell.edu/uscode/text/17/107). U.S. courts have recognized this kind of software reverse engineering and clean-room reimplementation for compatibility in cases including:
 
@@ -37,7 +37,7 @@ Features include:
 - Multi-light group support
 - Fully local operation with no cloud dependency
 
-This ESP32-S3 controller talks to **AquaIllumination Hydra®** lights directly over BLE using the reverse-engineered myAI / Mobius® protocol, with experimental local BLE control for compatible AI pumps, MQTT integration, and a Modbus RTU slave register map for PLC integration.
+This ESP32-S3 controller talks to **AquaIllumination Hydra®** lights directly over BLE using a local myAI / Mobius® protocol implementation, with experimental local BLE control for compatible AI pumps, MQTT integration, and a Modbus RTU slave register map for PLC integration.
 
 **Target hardware**: This project is developed and release-tested for the [Waveshare ESP32-S3-RS485-CAN](https://www.waveshare.com/wiki/ESP32-S3-RS485-CAN#Onboard_Resources). That board provides the expected ESP32-S3 MCU, 2.4 GHz WiFi/BLE, 16MB flash, USB-C flashing/debug, wide-range screw-terminal power input, and onboard isolated RS485 hardware.
 
