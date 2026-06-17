@@ -202,7 +202,7 @@ static const char STATUS_HTML[] =
 "<section class=panel><div class=panel-head><div><h2>Saved Schedules</h2><p id=scheduleNext>Next action loading.</p></div><button id=refreshSchedules class=\"btn ghost\">Refresh</button></div><div class=panel-body><div id=schedules class=stack><div class=empty>Loading schedules&hellip;</div></div></div></section>"
 "</div></section>"
 "<section id=tab-pumps class=tabpane><div class=tabgrid>"
-"<section class=panel><div class=panel-head><div><h2>Registered Pumps</h2><p>Experimental Orbit/Nero-style local controls.</p></div><button id=refreshPumps class=\"btn ghost\">Refresh</button></div><div id=pumps class=\"panel-body stack\"><div class=empty>Loading pumps&hellip;</div></div></section>"
+"<section class=panel><div class=panel-head><div><h2>Registered Pumps</h2><p>Experimental Orbit-style local controls.</p></div><button id=refreshPumps class=\"btn ghost\">Refresh</button></div><div id=pumps class=\"panel-body stack\"><div class=empty>Loading pumps&hellip;</div></div></section>"
 "<section class=panel><div class=panel-head><div><h2>Manual Pump Control</h2><p>Send an experimental live-demo pump scene.</p></div><span class=pill>Experimental</span></div><div class=panel-body><div class=settings><label class=wide><span class=label>Pump</span><select id=pumpTarget></select></label><label><span class=label>Mode</span><select id=pumpMode><option value=1>Constant Speed</option><option value=15>Random</option><option value=16>Pulse</option><option value=13>Feed</option></select></label><label><span class=label>Max Speed %</span><input id=pumpSpeed type=number min=0 max=100 value=40></label><label><span class=label>Min Speed %</span><input id=pumpMinSpeed type=number min=0 max=100 value=20></label><label><span class=label>Variance %</span><input id=pumpVariance type=number min=0 max=100 value=50></label><label><span class=label>On Time ms</span><input id=pumpOnMs type=number min=100 max=60000 value=1000></label><label><span class=label>Off Time ms</span><input id=pumpOffMs type=number min=100 max=60000 value=1000></label><div class=\"split wide\"><button id=applyPump class=\"btn primary\">Apply</button><button id=feedPump class=btn>Feed</button><button id=offPump class=\"btn danger\">Off</button></div></div></div></section>"
 "</div></section>"
 "<section id=tab-pumpschedules class=tabpane><div class=tabgrid>"
@@ -246,7 +246,7 @@ static const char STATUS_HTML[] =
 "function groupRow(g){const row=el('article','row');const left=el('div');const title=el('div','row-title');title.appendChild(el('span','name',g.display_name||g.group_id));title.appendChild(el('span','pill',(g.member_count||0)+' lights'));left.appendChild(title);addMeta(left,(g.members||[]).map(m=>'Light '+m));const act=el('div','actions');const del=el('button','btn danger','Delete');del.onclick=()=>deleteGroup(g.group_id);act.appendChild(del);row.appendChild(left);row.appendChild(act);return row;}"
 "async function saveGroup(){const name=($('groupName').value||'').trim();if(!name)return toast('Group name is required');if(/[\"\\\\<>]/.test(name))return toast('Group name cannot contain quotes, backslashes, <, or >');const members=[...document.querySelectorAll('.groupMember:checked')].map(c=>c.value);if(!members.length)return toast('Select at least one light');const gid='grp-'+name.replace(/[^a-zA-Z0-9]/g,'').slice(0,20);try{await jpost('/api/groups',{group_id:gid,display_name:name,members:members.join(',')});toast('Group saved');$('groupName').value='';document.querySelectorAll('.groupMember').forEach(c=>c.checked=false);refreshGroups();}catch(e){toast('Group save failed: '+e.message);}}"
 "async function deleteGroup(id){if(!confirm('Delete group '+id+'?'))return;try{await jdel('/api/groups/'+id);toast('Group deleted');refreshGroups();}catch(e){toast('Delete group failed: '+e.message);}}"
-"async function startScan(){const btn=$('scanBtn'),msg=$('scanmsg'),bar=$('scanProgress');btn.disabled=true;bar.style.width='0';try{const d=await jpost('/api/scan');const dur=(d&&d.duration_ms)||30000;const start=Date.now();msg.textContent='Scanning for nearby Mobius lights...';clearInterval(window.scanTimer);window.scanTimer=setInterval(()=>{const pct=Math.min(100,((Date.now()-start)/dur)*100);bar.style.width=pct+'%';},250);setTimeout(refreshScanResults,dur+1200);}catch(e){btn.disabled=false;msg.textContent='Scan failed';toast('Scan failed: '+e.message);}}"
+"async function startScan(){const btn=$('scanBtn'),msg=$('scanmsg'),bar=$('scanProgress');btn.disabled=true;bar.style.width='0';try{const d=await jpost('/api/scan');const dur=(d&&d.duration_ms)||30000;const start=Date.now();msg.textContent='Scanning for Hydra lights and Orbit pumps...';clearInterval(window.scanTimer);window.scanTimer=setInterval(()=>{const pct=Math.min(100,((Date.now()-start)/dur)*100);bar.style.width=pct+'%';},250);setTimeout(refreshScanResults,dur+1200);}catch(e){btn.disabled=false;msg.textContent='Scan failed';toast('Scan failed: '+e.message);}}"
 "async function refreshScanResults(){clearInterval(window.scanTimer);$('scanProgress').style.width='100%';$('scanBtn').disabled=false;try{const r=await jget('/api/scan/results');const box=$('scanresults');box.innerHTML='';const list=r.results||[];$('scanmsg').textContent=list.length?`${list.length} device${list.length===1?'':'s'} found.`:'No devices found. Put the device in pairing mode and scan again.';for(const l of list)box.appendChild(scanRow(l));refreshLights();refreshPumps();}catch(e){toast('Scan results failed: '+e.message);}}"
 "function scanRow(l){let serial=l.serial&&l.serial.length>0&&l.model!=0?l.serial:l.ble_addr.replace(/:/g,'').toUpperCase().slice(0,10);const clean=serial.replace(/[^a-zA-Z0-9]/g,'').slice(0,10);const isPump=l.device_type==='pump';const lid='hydra64-'+clean,pid='pump-'+clean;let label=isPump?'AI Pump':(l.model==0?'Unknown pairing device':modelLabel(l.model));const shown=l.name||label,useModel=l.model||335,useSerial=l.serial&&l.serial.length>0?l.serial:l.ble_addr;const row=el('article','row');const left=el('div');const title=el('div','row-title');title.appendChild(el('span','name',shown));title.appendChild(el('span','pill',label));left.appendChild(title);addMeta(left,[useSerial,l.ble_addr+' t='+l.ble_addr_type,'RSSI '+l.rssi]);const act=el('div','actions');const b=el('button','btn primary',isPump?'Add Pump':'Add Light');b.onclick=()=>isPump?addPump(pid,shown,l.ble_addr,l.ble_addr_type,useSerial,useModel):addLight(lid,shown,l.ble_addr,l.ble_addr_type,useSerial,useModel);act.appendChild(b);if(!isPump){const pb=el('button','btn','Add as Pump');pb.onclick=()=>addPump(pid,shown,l.ble_addr,l.ble_addr_type,useSerial,useModel);act.appendChild(pb);}row.appendChild(left);row.appendChild(act);return row;}"
 "async function addLight(id,name,addr,addr_type,serial,model){try{const r=await jpost('/api/lights',{light_id:id,display_name:name,ble_addr:addr,ble_addr_type:addr_type,serial:serial,model:model});toast(r.added?'Light added':'Light already registered');refreshLights();}catch(e){toast('Add failed: '+e.message);}}"
@@ -689,7 +689,7 @@ static bool pump_command_values_ok(const pending_command_t *cmd)
     if (cmd->pump_speed_percent > 100 ||
         cmd->pump_min_speed_percent > 100 ||
         cmd->pump_variance_percent > 100) return false;
-    if (!ai_pump_mode_is_supported(cmd->pump_mode)) return false;
+    if (!ai_pump_mode_is_orbit_supported(cmd->pump_mode)) return false;
     if (cmd->pump_mode == CONFIG_PUMP_MODE_SYNC && !cmd->pump_has_master) return false;
     if (cmd->pump_mode == CONFIG_PUMP_MODE_PULSE &&
         (cmd->pump_on_time_ms == 0 || cmd->pump_off_time_ms == 0)) return false;
@@ -2016,7 +2016,7 @@ static esp_err_t get_pump_schedules(httpd_req_t *req)
     httpd_resp_set_type(req, "application/json");
     httpd_resp_set_hdr(req, "Cache-Control", "no-store");
 
-    char chunk[512];
+    char chunk[768];
     snprintf(chunk, sizeof chunk,
         "{\"running\":%s,\"next_action\":\"%s\",\"schedules\":[",
         st.running ? "true" : "false", st.next_action);
@@ -2024,7 +2024,7 @@ static esp_err_t get_pump_schedules(httpd_req_t *req)
 
     for (uint8_t i = 0; i < cfg.count; ++i) {
         const config_pump_schedule_t *s = &cfg.schedules[i];
-        snprintf(chunk, sizeof chunk,
+        int n = snprintf(chunk, sizeof chunk,
             "%s{\"enabled\":%s,\"schedule_id\":\"%s\",\"name\":\"%s\","
             "\"target_id\":\"%s\",\"active_mode\":%u,\"active_speed_percent\":%u,"
             "\"active_min_speed_percent\":%u,\"active_variance_percent\":%u,"
@@ -2058,6 +2058,7 @@ static esp_err_t get_pump_schedules(httpd_req_t *req)
             (unsigned)s->end_minute,
             (int)s->start_offset_min,
             (int)s->end_offset_min);
+        if (n < 0 || (size_t)n >= sizeof chunk) return ESP_FAIL;
         if (httpd_resp_send_chunk(req, chunk, HTTPD_RESP_USE_STRLEN) != ESP_OK) return ESP_FAIL;
     }
     if (httpd_resp_send_chunk(req, "]}", HTTPD_RESP_USE_STRLEN) != ESP_OK) return ESP_FAIL;

@@ -6,7 +6,10 @@
 
 static void test_build_constant_speed_payload(void)
 {
-    ai_pump_command_t cmd = { PUMP_MODE_CONSTANT, 50 };
+    ai_pump_command_t cmd = {
+        .mode = PUMP_MODE_CONSTANT,
+        .speed_percent = 50,
+    };
     uint8_t out[AI_PUMP_SET_LDS_PAYLOAD_BYTES];
     size_t n = ai_pump_build_live_demo_scene_nero_write(&cmd, 60, out, sizeof out);
     TEST_ASSERT_EQUAL_size_t(AI_PUMP_SET_LDS_PAYLOAD_BYTES, n);
@@ -24,7 +27,10 @@ static void test_build_constant_speed_payload(void)
 
 static void test_build_feed_payload(void)
 {
-    ai_pump_command_t cmd = { PUMP_MODE_FEED, 10 };
+    ai_pump_command_t cmd = {
+        .mode = PUMP_MODE_FEED,
+        .speed_percent = 10,
+    };
     uint8_t out[AI_PUMP_SET_LDS_PAYLOAD_BYTES];
     size_t n = ai_pump_build_live_demo_scene_nero_write(&cmd, 0, out, sizeof out);
     TEST_ASSERT_EQUAL_size_t(AI_PUMP_SET_LDS_PAYLOAD_BYTES, n);
@@ -89,7 +95,10 @@ static void test_mode_support_helpers(void)
 
 static void test_rejects_invalid_args(void)
 {
-    ai_pump_command_t cmd = { PUMP_MODE_CONSTANT, 101 };
+    ai_pump_command_t cmd = {
+        .mode = PUMP_MODE_CONSTANT,
+        .speed_percent = 101,
+    };
     uint8_t out[AI_PUMP_SET_LDS_PAYLOAD_BYTES];
     TEST_ASSERT_EQUAL_size_t(0, ai_pump_build_live_demo_scene_nero_write(&cmd, 60, out, sizeof out));
     cmd.speed_percent = 50;

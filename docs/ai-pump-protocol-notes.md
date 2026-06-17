@@ -8,20 +8,40 @@ This implementation is an independently written interoperability layer. It does 
 
 The first pump implementation supports:
 
-- Discovery classification for likely AI pump advertisements, including Orbit, Nero, and Axis naming/model hints.
+- Discovery classification for Hydra lights and Orbit 2 / Orbit 4 pumps only. Other BLE advertisements are ignored by the web scan result buffer.
 - A separate NVS-backed pump registry with up to 4 registered pumps.
 - Manual pump commands from the web UI.
 - Local pump schedules with fixed-time, sunrise, and sunset triggers.
 - BLE write dispatch through the existing NimBLE command worker.
 
-The supported command modes are:
+The web UI and schedule engine expose the Orbit-supported command modes:
 
 | Mode | Numeric value | Notes |
 |---|---:|---|
 | Constant | `1` | Runs the pump at the requested speed percentage. |
+| Random | `15` | Uses min speed, max speed, and variance percentages. |
+| Pulse | `16` | Uses max speed plus on/off pulse timing in milliseconds. |
 | Feed | `13` | Sends the feed-mode primitive with the requested speed percentage. |
 
 Speed is accepted as `0..100` percent and encoded as tenths of a percent in the pump primitive.
+
+The lower-level protocol builder also understands the Mobius pump mode IDs found during interoperability work:
+
+| Mode | Numeric value |
+|---|---:|
+| Lagoon | `2` |
+| Reef Crest | `3` |
+| Nutrient Transport | `4` |
+| Tidal Swell | `5` |
+| Short Pulse | `6` |
+| Gyre | `7` |
+| Transition | `8` |
+| Expanding Pulse | `9` |
+| Sync | `10` |
+| EcoSmart Back | `12` |
+| Battery Backup | `14` |
+
+These broader modes are not exposed for Orbit schedules. `Sync` additionally requires an explicit 8-byte master identity, so it is rejected unless the caller provides that value.
 
 ## Payload Shape
 
@@ -44,8 +64,8 @@ Pump schedules are stored separately from lighting schedules and support up to 1
 
 - Start trigger: fixed time, sunrise offset, or sunset offset.
 - End trigger: fixed time, sunrise offset, or sunset offset.
-- Active mode and speed.
-- End mode and speed.
+- Active mode, speed, min speed, variance, pulse on time, and pulse off time.
+- End mode, speed, min speed, variance, pulse on time, and pulse off time.
 
 The schedule engine runs locally on the ESP32 and queues pump commands through `command_queue`, so pump scheduling continues without cloud access once time and sun settings are available.
 

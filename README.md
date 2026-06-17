@@ -54,7 +54,7 @@ Other ESP32-S3 boards can run HydraBridge ESP32, but may need changes before fla
 | Light registry + command queue | ✅ 4 lights, 4 groups, renaming, auto-reconnect metadata, per-light FIFO with coalescing, NVS persistence |
 | Command engine | ✅ Unified `ce_request_t` → validate → expand → enqueue from any source |
 | BLE discovery and light control | ✅ Scans, registers, reconnects, pairs, and writes commands to Hydra® lights |
-| AI pump support | 🧪 Experimental Orbit/Nero/Axis-class discovery, registry, manual constant/feed commands, and local pump schedules |
+| AI pump support | 🧪 Experimental Orbit 2 / Orbit 4 discovery, registry, manual Constant/Random/Pulse/Feed commands, and local pump schedules |
 | Web UI | ✅ Local browser UI for discovery, lights, pumps, groups, profiles, schedules, OTA, MQTT, RS485, WiFi, time, and sun settings |
 | Lighting schedules | ✅ NVS-backed schedules targeting lights or groups, with fixed-time, sunrise, sunset, intensity, profile, and ramp controls |
 | Time and sun events | ✅ Optional SNTP sync, POSIX timezone setting, and local sunrise/sunset calculation from configured coordinates |
@@ -74,9 +74,10 @@ AI pump support currently targets Orbit-class devices using the Mobius-style pum
 
 Current pump support includes:
 
-- Registering likely AI pump advertisements from BLE scan results.
+- Registering Orbit 2 / Orbit 4 pump advertisements from BLE scan results.
 - Renaming and removing registered pumps.
-- Manual `Constant` and `Feed` commands with `0..100%` speed.
+- Manual `Constant`, `Random`, `Pulse`, and `Feed` commands with `0..100%` speed.
+- Mode-specific pump parameters: min speed, variance, pulse on time, and pulse off time.
 - Up to 4 registered pumps, persisted in NVS.
 - Up to 12 pump schedules, persisted separately from lighting schedules.
 - Fixed-time, sunrise, and sunset schedule triggers using the same time/sun settings as lighting schedules.
@@ -105,7 +106,7 @@ components/
   preset_engine/             Command presets
   light_registry/            Registered lights + named groups (NVS-backed)
   pump_registry/             Registered AI pumps (NVS-backed)
-  ble_scanner/               Hydra advertisement parsing
+  ble_scanner/               Hydra light and Orbit pump advertisement parsing
   ble_light_client/          NimBLE central scan/connect/GATT command worker for lights and pumps
   command_queue/             Per-target bounded FIFO with coalescing
   command_engine/            ce_request_t → ce_result_t pipeline (Modbus / MQTT / web all converge here)
